@@ -144,9 +144,12 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                     center = Offset(size.width * 0.5f, size.height * 0.8f)
                 )
             }
-            .windowInsetsPadding(WindowInsets.safeDrawing) // Safe area support
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
             // 1. Classic Windows Aero Titlebar
             AeroTitleBar {
                 // Quick Rescan button as an overlay
@@ -398,7 +401,7 @@ fun AeroTitleBar(
  * Subcomponent: Glassy styled tab button
  */
 @Composable
-fun AeroTabButton(
+fun RowScope.AeroTabButton(
     label: String,
     icon: ImageVector,
     selected: Boolean,
@@ -412,6 +415,7 @@ fun AeroTabButton(
 
     Row(
         modifier = Modifier
+            .weight(1f)
             .clip(RoundedCornerShape(8.dp))
             .background(brush = Brush.verticalGradient(colors = bgColors))
             .border(
@@ -420,22 +424,24 @@ fun AeroTabButton(
                 RoundedCornerShape(8.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
             tint = if (selected) Color.White else Color(0xFFE6F3FF)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = label,
             color = if (selected) Color.White else Color(0xFFCBE3FB),
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+            fontSize = 11.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -884,14 +890,12 @@ fun NowPlayingView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (currentTrack == null) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -919,12 +923,12 @@ fun NowPlayingView(
                 }
             } else {
                 // Large Spinning CD visualizer panel
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.weight(1f))
                 AlbumArtView(track = currentTrack, isPlaying = isPlaying)
+                Spacer(modifier = Modifier.weight(0.8f))
 
                 // Track Title info
                 Column(
-                    modifier = Modifier.padding(top = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -947,15 +951,17 @@ fun NowPlayingView(
                     )
                 }
 
+                Spacer(modifier = Modifier.weight(0.8f))
+
                 // Procedural Bars Equalizer visualizer
-                Spacer(modifier = Modifier.height(14.dp))
                 VisualizerCanvas(isPlaying = isPlaying)
+
+                Spacer(modifier = Modifier.weight(0.8f))
 
                 // Miniature Glass playback statistics (playing info bits)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
                         .background(Color(0x1F000000), RoundedCornerShape(10.dp))
                         .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -988,7 +994,7 @@ fun NowPlayingView(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
@@ -1073,7 +1079,7 @@ fun WmpBottomPlayerBar(
             // Left block: Small mini screen presenting active track details
             Row(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(2.2f)
                     .clickable(onClick = onMaximizedClick),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1146,7 +1152,7 @@ fun WmpBottomPlayerBar(
 
             // Right block: Shuffle, block repeat loop buttons
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(0.8f),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
