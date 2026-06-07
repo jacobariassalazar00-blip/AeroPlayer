@@ -1,0 +1,6 @@
+{
+  "name": "AeroPlayer",
+  "description": "Un reproductor de música local elegante con diseño Frutiger Aero y estética de Windows Media Player (Windows Vista/7).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
