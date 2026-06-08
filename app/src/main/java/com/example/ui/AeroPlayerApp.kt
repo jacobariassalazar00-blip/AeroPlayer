@@ -75,6 +75,57 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
     val isShuffle by viewModel.isShuffle.collectAsStateWithLifecycle()
     val isRepeatSingle by viewModel.isRepeatSingle.collectAsStateWithLifecycle()
 
+    // Aero Custom Themes Configuration
+    val currentTheme by viewModel.currentTheme.collectAsStateWithLifecycle()
+
+    val auroraColors = when (currentTheme) {
+        "claro" -> listOf(
+            Color(0xFFE4F0FB), // Sparkling frosty sky blue top
+            Color(0xFFBAD6F2), // Translucent daylight ice blue
+            Color(0xFF90BEEB), // Bright aero breeze sky blue
+            Color(0xFF70A9E3)  // Radiant soft sky-blue
+        )
+        "verde" -> listOf(
+            Color(0xFF022A16), // Dark evergreen base
+            Color(0xFF034D2A), // Forest moss green depth
+            Color(0xFF007A48), // Classic windo-verde gloss
+            Color(0xFF05B26F)  // Glowing emerald neon-sheen
+        )
+        "gris_oscuro" -> listOf(
+            Color(0xFF16181C), // Deep graphite carbon
+            Color(0xFF24272F), // Slate gray dark metallic
+            Color(0xFF333742), // Charcoal ash dark gray
+            Color(0xFF4B5162)  // Translucent premium platinum luster
+        )
+        else -> listOf( // "azul"
+            Color(0xFF002244), // Deep Professional Midnight Blue
+            Color(0xFF003C71), // Professional Royal Dark Blue
+            Color(0xFF005DA3), // Professional Middle Blue
+            Color(0xFF0078D7)  // Professional Radiant Blue
+        )
+    }
+
+    val bubbleColor = when (currentTheme) {
+        "claro" -> Color(0x3B3D93FF) 
+        "verde" -> Color(0x1F00FF88) 
+        "gris_oscuro" -> Color(0x22FFFFFF) 
+        else -> Color(0x1600FFFF) 
+    }
+
+    val accentColor = when (currentTheme) {
+        "claro" -> Color(0xFF005DA3)
+        "verde" -> Color(0xFF00FF7F)
+        "gris_oscuro" -> Color(0xFFC0D5E8)
+        else -> Color(0xFF5ED8FF)
+    }
+
+    val cardGlowColor = when (currentTheme) {
+        "claro" -> Color(0x1A1A73E8)
+        "verde" -> Color(0x2B10C050)
+        "gris_oscuro" -> Color(0x158CC6FF)
+        else -> Color(0x2B3AD1FF)
+    }
+
     // Permission States
     var hasPermissions by remember {
         mutableStateOf(checkAudioPermissions(context))
@@ -2464,7 +2515,11 @@ fun SettingsDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         AeroClassyDialogLayout(title = "Configuración de Biblioteca") {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 // Settings subtabs
                 Row(
                     modifier = Modifier
@@ -2551,28 +2606,27 @@ fun SettingsDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    LazyColumn(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 140.dp)
                             .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
-                            .background(Color(0x15000000)),
-                        contentPadding = PaddingValues(4.dp),
+                            .background(Color(0x15000000))
+                            .padding(4.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         if (scannedFolders.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
                             }
                         } else {
-                            items(scannedFolders) { path ->
+                            scannedFolders.forEach { path ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -2647,28 +2701,27 @@ fun SettingsDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    LazyColumn(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 140.dp)
                             .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
-                            .background(Color(0x15000000)),
-                        contentPadding = PaddingValues(4.dp),
+                            .background(Color(0x15000000))
+                            .padding(4.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         if (ignoredFolders.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("Ninguna carpeta ignorada.", color = Color.LightGray, fontSize = 11.sp)
-                                }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Ninguna carpeta ignorada.", color = Color.LightGray, fontSize = 11.sp)
                             }
                         } else {
-                            items(ignoredFolders) { path ->
+                            ignoredFolders.forEach { path ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -3710,6 +3763,7 @@ fun SettingsPaneView(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(14.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Text(
                 text = "Configuración de Biblioteca",
@@ -3808,38 +3862,38 @@ fun SettingsPaneView(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .heightIn(max = 180.dp)
                         .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
                         .background(Color(0x15000000))
                         .padding(4.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (scannedFolders.isEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
                         }
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            items(scannedFolders) { path ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                        scannedFolders.forEach { path ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { viewModel.removeScannedFolder(path) },
+                                    modifier = Modifier.size(28.dp)
                                 ) {
-                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                                    IconButton(
-                                        onClick = { viewModel.removeScannedFolder(path) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
-                                    }
+                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -3903,38 +3957,38 @@ fun SettingsPaneView(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .heightIn(max = 180.dp)
                         .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
                         .background(Color(0x15000000))
                         .padding(4.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (ignoredFolders.isEmpty()) {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text("No hay filtros activos (escanea todo libremente)", color = Color.LightGray, fontSize = 11.sp)
                         }
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            items(ignoredFolders) { path ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                        ignoredFolders.forEach { path ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = { viewModel.removeIgnoredFolder(path) },
+                                    modifier = Modifier.size(28.dp)
                                 ) {
-                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                                    IconButton(
-                                        onClick = { viewModel.removeIgnoredFolder(path) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
-                                    }
+                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
                                 }
                             }
                         }

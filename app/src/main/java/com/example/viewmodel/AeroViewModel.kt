@@ -45,6 +45,26 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
     )
     val ignoredFolders = _ignoredFolders.asStateFlow()
 
+    private val _currentTheme = MutableStateFlow<String>(
+        prefs.getString("selected_theme", "azul") ?: "azul"
+    )
+    val currentTheme = _currentTheme.asStateFlow()
+
+    fun setTheme(themeId: String) {
+        _currentTheme.value = themeId
+        prefs.edit().putString("selected_theme", themeId).apply()
+    }
+
+    fun clearDatabaseCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _scannedFolders.value = emptyList()
+            _ignoredFolders.value = listOf("Android/data", ".thumbnails", "WhatsApp/Media")
+            prefs.edit().putString("scanned_paths", "").putString("ignored_paths", "Android/data,.thumbnails,WhatsApp/Media").apply()
+            musicDao.clearScannedTracks()
+            ensureSyntheticTracksExist()
+        }
+    }
+
     fun addScannedFolder(path: String) {
         if (path.isBlank()) return
         val newList = (_scannedFolders.value + path.trim()).distinct()
