@@ -156,38 +156,50 @@ fun AlbumArtView(
                             colors = listOf(
                                 Color(0xFF0D3256),
                                 Color(0xFF031427)
-                            )
+                             )
                         )
                     )
                     .border(2.dp, Color(0xFF438CD0), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                // Windows Aero glowing vector bubbles in the CD sticker
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .drawBehind {
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(Color(0xFF00C3FF), Color.Transparent)
-                                ),
-                                radius = size.width * 0.6f,
-                                center = Offset(size.width * 0.2f, size.height * 0.3f)
-                            )
-                            drawCircle(
-                                color = Color(0x2EFFFFFF),
-                                radius = size.width * 0.22f,
-                                center = Offset(size.width * 0.8f, size.height * 0.7f)
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = Color(0xFF53BCFF)
+                if (!track?.coverPath.isNullOrEmpty() && java.io.File(track.coverPath).exists()) {
+                    coil.compose.AsyncImage(
+                        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                            .data(java.io.File(track.coverPath))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Carátula",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
+                } else {
+                    // Windows Aero glowing vector bubbles in the CD sticker
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .drawBehind {
+                                drawCircle(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(Color(0xFF00C3FF), Color.Transparent)
+                                    ),
+                                    radius = size.width * 0.6f,
+                                    center = Offset(size.width * 0.2f, size.height * 0.3f)
+                                )
+                                drawCircle(
+                                    color = Color(0x2EFFFFFF),
+                                    radius = size.width * 0.22f,
+                                    center = Offset(size.width * 0.8f, size.height * 0.7f)
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(36.dp),
+                            tint = Color(0xFF53BCFF)
+                        )
+                    }
                 }
             }
         }

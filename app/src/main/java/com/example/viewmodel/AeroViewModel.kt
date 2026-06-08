@@ -239,9 +239,9 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
                     val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
 
                     while (c.moveToNext()) {
-                        val title = c.getString(titleCol) ?: "Canción Desconocida"
-                        val artist = c.getString(artistCol) ?: "Artista Desconocido"
-                        val album = c.getString(albumCol) ?: "Álbum Desconocido"
+                        val mediaStoreTitle = c.getString(titleCol) ?: "Canción Desconocida"
+                        val mediaStoreArtist = c.getString(artistCol) ?: "Artista Desconocido"
+                        val mediaStoreAlbum = c.getString(albumCol) ?: "Álbum Desconocido"
                         val duration = c.getLong(durationCol)
                         val path = c.getString(dataCol) ?: ""
 
@@ -255,15 +255,24 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
                         val isIgnored = _ignoredFolders.value.any { path.contains(it, ignoreCase = true) }
 
                         if (isCorrectLocation && !isIgnored && path.isNotEmpty() && duration > 2000) {
+                            // Extract deep metadata directly from the storage file
+                            val meta = extractMetadataAndCover(path)
+                            val finalTitle = if (!meta.title.isNullOrBlank()) meta.title else mediaStoreTitle
+                            val finalArtist = if (!meta.artist.isNullOrBlank()) meta.artist else mediaStoreArtist
+                            val finalAlbum = if (!meta.album.isNullOrBlank()) meta.album else mediaStoreAlbum
+
                             scannedTracks.add(
                                 Track(
-                                    title = title,
-                                    artist = artist,
-                                    album = album,
+                                    title = finalTitle,
+                                    artist = finalArtist,
+                                    album = finalAlbum,
                                     duration = duration,
                                     path = path,
                                     isFavorite = false,
-                                    isSynthetic = false
+                                    isSynthetic = false,
+                                    genre = meta.genre,
+                                    year = meta.year,
+                                    coverPath = meta.coverPath
                                 )
                             )
                         }
@@ -283,6 +292,92 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to scan MediaStore", e)
+            }
+        }
+    }
+
+    private fun extractMetadataAndCover(path: String): MetadataResult {
+        val retriever = android.media.MediaMetadataRetriever()
+        var title: String? = null
+        var artist: String? = null
+        var album: String? = null
+        var genre: String? = null
+        var year: String? = null
+        var duration: Long? = null
+        var coverPath: String? = null
+
+        try {
+            retriever.setDataSource(path)
+            title = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+            artist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            album = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            genre = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_GENRE)
+            year = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_YEAR) 
+                ?: retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DATE)
+            val durStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+            if (durStr != null) {
+                duration = durStr.toLongOrNull()
+            }
+
+            // Extract album art byte array
+            val embeddedPic = retriever.embeddedPicture
+            if (embeddedPic != null && embeddedPic.isNotEmpty()) {
+                val coversDir = java.io.File(getApplication<Application>().cacheDir, "covers")
+                if (!coversDir.exists()) {
+                    coversDir.mkdirs()
+                }
+                val fileName = "cover_${path.hashCode()}.jpg"
+                val file = java.io.File(coversDir, fileName)
+                java.io.FileOutputStream(file).use { fos ->
+                    fos.write(embeddedPic)
+                }
+                coverPath = file.absolutePath
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting metadata from file at $path", e)
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
+        return MetadataResult(title, artist, album, genre, year, duration, coverPath)
+    }
+
+    private data class MetadataResult(
+        val title: String?,
+        val artist: String?,
+        val album: String?,
+        val genre: String?,
+        val year: String?,
+        val duration: Long?,
+        val coverPath: String?
+    )
+
+    // Manual metadata editor
+    fun updateTrackMetadata(
+        track: Track,
+        newTitle: String,
+        newArtist: String,
+        newAlbum: String,
+        newGenre: String,
+        newYear: String
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = track.copy(
+                title = newTitle.trim(),
+                artist = newArtist.trim(),
+                album = newAlbum.trim(),
+                genre = if (newGenre.isBlank()) null else newGenre.trim(),
+                year = if (newYear.isBlank()) null else newYear.trim()
+            )
+            musicDao.updateTrack(updated)
+            
+            // Sync with current playing track if updated
+            if (_currentTrack.value?.id == track.id) {
+                _currentTrack.value = updated
             }
         }
     }

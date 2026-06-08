@@ -59,7 +59,7 @@ interface MusicDao {
     suspend fun deleteTracksById(ids: List<Int>)
 }
 
-@Database(entities = [Track::class, Playlist::class, PlaylistTrack::class], version = 2, exportSchema = false)
+@Database(entities = [Track::class, Playlist::class, PlaylistTrack::class], version = 3, exportSchema = false)
 abstract class AeroDatabase : RoomDatabase() {
     abstract fun musicDao(): MusicDao
 

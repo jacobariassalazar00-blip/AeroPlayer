@@ -106,13 +106,15 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
     // Modal Control Flags
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var trackForPlaylistSelector by remember { mutableStateOf<Track?>(null) }
+    var trackForMetadataEdit by remember { mutableStateOf<Track?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     val selectedTracks = remember { mutableStateListOf<Track>() }
     var showBulkDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showPlaylistSelectorForSelection by remember { mutableStateOf(false) }
 
-    // Active View Tab: 0 = Biblioteca, 1 = Listas de reproducción, 2 = Reproduciendo ahora
-    var activeTab by remember { mutableStateOf(0) }
+    // Windows Media Player 11 navigation category state
+    var activeCategory by remember { mutableStateOf(WmpCategory.BIBLIOTECA) }
+    var sidebarExpanded by remember { mutableStateOf(true) }
 
     // Layout Root Box (Cosmic gradient background with water bubbles)
     Box(
@@ -188,32 +190,76 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                 }
             }
 
-            // 2. Translucent Navigation Header Tabs (Vista style ribbon tabs)
+            // 2. WMP Style Navigation Breadcrumbs
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .background(Color(0x1F001D3A), RoundedCornerShape(10.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .background(color = Color(0x1B000000), shape = RoundedCornerShape(4.dp))
+                    .border(width = 1.dp, color = Color(0x1AFFFFFF), shape = RoundedCornerShape(4.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AeroTabButton(
-                    label = "Biblioteca",
-                    icon = Icons.Default.MusicNote,
-                    selected = (activeTab == 0),
-                    onClick = { activeTab = 0 }
-                )
-                AeroTabButton(
-                    label = "Colecciones",
-                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
-                    selected = (activeTab == 1),
-                    onClick = { activeTab = 1 }
-                )
-                AeroTabButton(
-                    label = "Reproducción",
-                    icon = Icons.Default.PlayCircle,
-                    selected = (activeTab == 2),
-                    onClick = { activeTab = 2 }
+                // Backward arrow button (quick link back to Biblioteca standard)
+                IconButton(
+                    onClick = { activeCategory = WmpCategory.BIBLIOTECA },
+                    enabled = activeCategory != WmpCategory.BIBLIOTECA,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = if (activeCategory != WmpCategory.BIBLIOTECA)
+                                    listOf(Color(0x805ED8FF), Color(0x20005DA3))
+                                else
+                                    listOf(Color(0x15FFFFFF), Color(0x05FFFFFF))
+                            ),
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (activeCategory != WmpCategory.BIBLIOTECA) Color(0x60FFFFFF) else Color(0x10FFFFFF),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Volver a Biblioteca",
+                        tint = if (activeCategory != WmpCategory.BIBLIOTECA) Color.White else Color.Gray,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Música de Biblioteca",
+                        color = Color(0xFFCBE3FB),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "  ►  ",
+                        color = Color(0x50FFFFFF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = activeCategory.title,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+
+                Text(
+                    text = "Windows Media Player 11",
+                    color = Color(0x7DDFEFFF),
+                    fontSize = 10.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                 )
             }
 
@@ -245,73 +291,247 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                 }
             }
 
-            // 3. Central Dynamic Screen View
-            Box(
+            // 3. Central Dual-Pane Panel layout (WMP 11 Style)
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                when (activeTab) {
-                    0 -> LibraryView(
-                        filteredTracks = filteredTracks,
-                        currentTrack = currentTrack,
-                        isPlaying = isPlaying,
-                        searchQuery = searchQuery,
-                        onSearchChange = { viewModel.searchQuery.value = it },
-                        onTrackSelect = { track -> viewModel.playTrack(track, filteredTracks) },
-                        onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
-                        onAddPlaylist = { track -> trackForPlaylistSelector = track },
-                        selectedTracks = selectedTracks,
-                        onToggleSelect = { track ->
-                            if (selectedTracks.contains(track)) {
-                                selectedTracks.remove(track)
-                            } else {
-                                selectedTracks.add(track)
-                            }
-                        },
-                        onClearSelection = { selectedTracks.clear() },
-                        onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
-                        onBulkFavoriteToggle = {
-                            val anyUnfavorite = selectedTracks.any { !it.isFavorite }
-                            selectedTracks.toList().forEach { track ->
-                                if (track.isFavorite != anyUnfavorite) {
-                                    viewModel.toggleFavorite(track)
-                                }
-                            }
-                            selectedTracks.clear()
-                        },
-                        onBulkDelete = { showBulkDeleteConfirmDialog = true }
-                    )
-                    1 -> PlaylistView(
-                        playlists = playlists,
-                        selectedPlaylist = selectedPlaylist,
-                        selectedPlaylistTracks = selectedPlaylistTracks,
-                        currentTrack = currentTrack,
-                        isPlaying = isPlaying,
-                        onSelectPlaylist = { viewModel.selectPlaylist(it) },
-                        onDeletePlaylist = { viewModel.deletePlaylist(it) },
-                        onTrackSelect = { track, list -> viewModel.playTrack(track, list) },
-                        onRemoveFromPlaylist = { track, pl -> viewModel.removeTrackFromPlaylist(track, pl) },
-                        onCreatePlaylistClick = { showCreatePlaylistDialog = true }
-                    )
-                    2 -> NowPlayingView(
-                        viewModel = viewModel,
-                        currentTrack = currentTrack,
-                        isPlaying = isPlaying,
-                        currentPosition = currentPosition,
-                        onSeek = { position -> viewModel.seekTo(position) },
-                        isShuffle = isShuffle,
-                        isRepeatSingle = isRepeatSingle,
-                        onToggleShuffle = { viewModel.toggleShuffle() },
-                        onToggleRepeat = { viewModel.toggleRepeatSingle() },
-                        onNext = { viewModel.next() },
-                        onPrevious = { viewModel.previous() }
-                    )
+                // Left Panel: Sticky Sidebar Navigation
+                WmpSidebarPanel(
+                    selectedCategory = activeCategory,
+                    onCategorySelect = { activeCategory = it },
+                    expanded = sidebarExpanded,
+                    onToggleExpand = { sidebarExpanded = !sidebarExpanded }
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Right Panel: Dynamic Details List Panel
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    when (activeCategory) {
+                        WmpCategory.BIBLIOTECA -> {
+                            LibraryView(
+                                filteredTracks = filteredTracks,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                searchQuery = searchQuery,
+                                onSearchChange = { viewModel.searchQuery.value = it },
+                                onTrackSelect = { track -> viewModel.playTrack(track, filteredTracks) },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.ARTISTAS -> {
+                            val allTracksVal by viewModel.allTracks.collectAsStateWithLifecycle()
+                            ArtistsView(
+                                allTracks = allTracksVal,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onTrackSelect = { track -> viewModel.playTrack(track, allTracksVal) },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.ALBUMES -> {
+                            val allTracksVal by viewModel.allTracks.collectAsStateWithLifecycle()
+                            AlbumsView(
+                                allTracks = allTracksVal,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onTrackSelect = { track -> viewModel.playTrack(track, allTracksVal) },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.GENEROS -> {
+                            val allTracksVal by viewModel.allTracks.collectAsStateWithLifecycle()
+                            GenresView(
+                                allTracks = allTracksVal,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onTrackSelect = { track -> viewModel.playTrack(track, allTracksVal) },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.PLAYLISTS -> {
+                            PlaylistsPaneView(
+                                playlists = playlists,
+                                selectedPlaylist = selectedPlaylist,
+                                selectedPlaylistTracks = selectedPlaylistTracks,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onSelectPlaylist = { viewModel.selectPlaylist(it) },
+                                onDeletePlaylist = { viewModel.deletePlaylist(it) },
+                                onTrackSelect = { track, list -> viewModel.playTrack(track, list) },
+                                onRemoveFromPlaylist = { track, pl -> viewModel.removeTrackFromPlaylist(track, pl) },
+                                onCreatePlaylistClick = { showCreatePlaylistDialog = true },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.FAVORITOS -> {
+                            FavoritesPaneView(
+                                favoriteTracks = favoriteTracks,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                onTrackSelect = { track -> viewModel.playTrack(track, favoriteTracks) },
+                                onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
+                                onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                                selectedTracks = selectedTracks,
+                                onToggleSelect = { track ->
+                                    if (selectedTracks.contains(track)) {
+                                        selectedTracks.remove(track)
+                                    } else {
+                                        selectedTracks.add(track)
+                                    }
+                                },
+                                onClearSelection = { selectedTracks.clear() },
+                                onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                                onBulkFavoriteToggle = {
+                                    val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                                    selectedTracks.toList().forEach { track ->
+                                        if (track.isFavorite != anyUnfavorite) {
+                                            viewModel.toggleFavorite(track)
+                                        }
+                                    }
+                                    selectedTracks.clear()
+                                },
+                                onBulkDelete = { showBulkDeleteConfirmDialog = true },
+                                onEditMetadata = { track -> trackForMetadataEdit = track }
+                            )
+                        }
+                        WmpCategory.REPRODUCCION -> {
+                            NowPlayingView(
+                                viewModel = viewModel,
+                                currentTrack = currentTrack,
+                                isPlaying = isPlaying,
+                                currentPosition = currentPosition,
+                                onSeek = { position -> viewModel.seekTo(position) },
+                                isShuffle = isShuffle,
+                                isRepeatSingle = isRepeatSingle,
+                                onToggleShuffle = { viewModel.toggleShuffle() },
+                                onToggleRepeat = { viewModel.toggleRepeatSingle() },
+                                onNext = { viewModel.next() },
+                                onPrevious = { viewModel.previous() }
+                            )
+                        }
+                        WmpCategory.CONFIGURACION -> {
+                            SettingsPaneView(viewModel = viewModel)
+                        }
+                    }
                 }
             }
 
-            // 4. Persistent Bottom Player Controls Bar (Glowing Windows Media Player circular orb deck)
+            // 4. Persistent Bottom Player Controls Bar
             WmpBottomPlayerBar(
                 currentTrack = currentTrack,
                 isPlaying = isPlaying,
@@ -324,7 +544,7 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                 onSeek = { position -> viewModel.seekTo(position) },
                 onToggleShuffle = { viewModel.toggleShuffle() },
                 onToggleRepeat = { viewModel.toggleRepeatSingle() },
-                onMaximizedClick = { activeTab = 2 }
+                onMaximizedClick = { activeCategory = WmpCategory.REPRODUCCION }
             )
         }
     }
@@ -457,6 +677,19 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                 }
             }
         }
+    }
+
+    // Metadata Manual Editor Dialog Tool
+    trackForMetadataEdit?.let { track ->
+        MetadataEditDialog(
+            track = track,
+            onDismiss = { trackForMetadataEdit = null },
+            onSave = { title, artist, album, genre, year ->
+                viewModel.updateTrackMetadata(track, title, artist, album, genre, year)
+                Toast.makeText(context, "Metadatos actualizados", Toast.LENGTH_SHORT).show()
+                trackForMetadataEdit = null
+            }
+        )
     }
 }
 
@@ -603,7 +836,9 @@ fun LibraryView(
     onClearSelection: () -> Unit,
     onBulkAddPlaylist: () -> Unit,
     onBulkFavoriteToggle: () -> Unit,
-    onBulkDelete: () -> Unit
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit,
+    onRemoveFromPlaylist: ((Track) -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Transparent compact Aero Search box (More compact as requested)
@@ -773,7 +1008,7 @@ fun LibraryView(
                                 .padding(horizontal = 8.dp, vertical = 6.dp), // More compact padding to show more items
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left indicator icon/badge showing checkboxes when selecting
+                            // Left indicator icon/badge showing custom cover art or checkboxes when selecting
                             Box(
                                 modifier = Modifier
                                     .size(28.dp) // compact size
@@ -781,18 +1016,40 @@ fun LibraryView(
                                         if (isSelected) Color(0xFF00B2FF)
                                         else if (isPlayingThis) Color(0x6000FFCC)
                                         else Color(0x15FFFFFF),
-                                        CircleShape
+                                        RoundedCornerShape(3.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) Color(0xFF5ED8FF) else Color(0x1CFFFFFF),
+                                        RoundedCornerShape(3.dp)
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = if (isSelected) Icons.Default.Check
-                                                  else if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp
-                                                  else Icons.Filled.MusicNote,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp),
-                                    tint = Color.White
-                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = Color.White
+                                    )
+                                } else if (!track.coverPath.isNullOrEmpty() && java.io.File(track.coverPath).exists()) {
+                                    coil.compose.AsyncImage(
+                                        model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                            .data(java.io.File(track.coverPath))
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = "Carátula",
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(3.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = if (isPlayingThis) Color(0xFF00FFCC) else Color(0xFF7ED2FF)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(10.dp))
 
@@ -826,6 +1083,19 @@ fun LibraryView(
                                 )
 
                                 if (selectedTracks.isEmpty()) {
+                                    // Metadata View & Manual Edit Tool Component
+                                    IconButton(
+                                        onClick = { onEditMetadata(track) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Editar Metadatos",
+                                            tint = Color(0xCCFFFFFF),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+
                                     // Favorite toggler
                                     IconButton(
                                         onClick = { onFavoriteToggle(track) },
@@ -839,17 +1109,31 @@ fun LibraryView(
                                         )
                                     }
 
-                                    // Playlist context adder
-                                    IconButton(
-                                        onClick = { onAddPlaylist(track) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.PlaylistAdd,
-                                            contentDescription = "Añadir a lista",
-                                            tint = Color(0xCCFFFFFF),
-                                            modifier = Modifier.size(16.dp)
-                                        )
+                                    // Playlist context action: remove if in playlist view, else add
+                                    if (onRemoveFromPlaylist != null) {
+                                        IconButton(
+                                            onClick = { onRemoveFromPlaylist(track) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.DeleteOutline,
+                                                contentDescription = "Eliminar de la lista",
+                                                tint = Color(0xFFFF6B6B),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        IconButton(
+                                            onClick = { onAddPlaylist(track) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlaylistAdd,
+                                                contentDescription = "Añadir a lista",
+                                                tint = Color(0xCCFFFFFF),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1047,12 +1331,32 @@ fun PlaylistView(
                                     modifier = Modifier.weight(1f),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
-                                        contentDescription = null,
-                                        tint = if (isPlayingThis) Color.White else Color(0xFF5ECEFF),
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color(0x15FFFFFF), RoundedCornerShape(3.dp))
+                                            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(3.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (!track.coverPath.isNullOrEmpty() && java.io.File(track.coverPath).exists()) {
+                                            coil.compose.AsyncImage(
+                                                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                                    .data(java.io.File(track.coverPath))
+                                                    .crossfade(true)
+                                                    .build(),
+                                                contentDescription = "Carátula",
+                                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(3.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = if (isPlayingThis) Color.White else Color(0xFF5ECEFF),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
@@ -1218,6 +1522,18 @@ fun NowPlayingView(
                         VisualizerCanvas(isPlaying = isPlaying)
 
                         Spacer(modifier = Modifier.weight(0.8f))
+
+                        if (!currentTrack.genre.isNullOrEmpty() || !currentTrack.year.isNullOrEmpty()) {
+                            Text(
+                                text = listOfNotNull(
+                                    currentTrack.genre?.takeIf { it.isNotBlank() }?.let { "Género: $it" },
+                                    currentTrack.year?.takeIf { it.isNotBlank() }?.let { "Año: $it" }
+                                ).joinToString("   •   "),
+                                color = Color(0xFFA2CADF),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                        }
 
                         // Miniature Glass playback statistics (playing info bits)
                         Row(
@@ -1598,10 +1914,23 @@ fun WmpBottomPlayerBar(
                                     colors = listOf(Color(0xFF0091FF), Color(0xFF002F5E))
                                 ),
                                 shape = RoundedCornerShape(4.dp)
-                            ),
+                            )
+                            .border(1.dp, Color(0x3BFFFFFF), RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                        if (!currentTrack.coverPath.isNullOrEmpty() && java.io.File(currentTrack.coverPath).exists()) {
+                            coil.compose.AsyncImage(
+                                model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                    .data(java.io.File(currentTrack.coverPath))
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Carátula",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                        }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
@@ -2262,3 +2591,1137 @@ fun BulkDeleteConfirmDialog(
         }
     }
 }
+
+/**
+ * DIALOG 5: Tool to view and edit metadata manually when necessary
+ */
+@Composable
+fun MetadataEditDialog(
+    track: Track,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, String, String) -> Unit
+) {
+    var title by remember { mutableStateOf(track.title) }
+    var artist by remember { mutableStateOf(track.artist) }
+    var album by remember { mutableStateOf(track.album) }
+    var genre by remember { mutableStateOf(track.genre ?: "") }
+    var year by remember { mutableStateOf(track.year ?: "") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        AeroClassyDialogLayout(title = "Editar Metadatos de Audio") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Cover preview if exists
+                if (!track.coverPath.isNullOrEmpty() && java.io.File(track.coverPath).exists()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0x15000000), RoundedCornerShape(2.dp))
+                            .border(1.dp, Color(0x1BFFFFFF), RoundedCornerShape(2.dp))
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        coil.compose.AsyncImage(
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(java.io.File(track.coverPath))
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Carátula",
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .border(1.dp, Color(0x4DFFFFFF), RoundedCornerShape(3.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Carátula Detectada",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Píxeles incrustados en etiquetas ID3 de origen.",
+                                color = Color(0xFFA1CADF),
+                                fontSize = 9.sp,
+                                lineHeight = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                // Title Input
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Título de Canción:", color = Color(0xFFCBE3FB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("edit_title_input"),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0x301A2B3C),
+                            unfocusedContainerColor = Color(0x10000000),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF33AAFF)
+                        ),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    )
+                }
+
+                // Artist Input
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Artista / Banda:", color = Color(0xFFCBE3FB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = artist,
+                        onValueChange = { artist = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("edit_artist_input"),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0x301A2B3C),
+                            unfocusedContainerColor = Color(0x10000000),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF33AAFF)
+                        ),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    )
+                }
+
+                // Album Input
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Álbum Musical:", color = Color(0xFFCBE3FB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = album,
+                        onValueChange = { album = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("edit_album_input"),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0x301A2B3C),
+                            unfocusedContainerColor = Color(0x10000000),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF33AAFF)
+                        ),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    )
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Genre Input
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Género musical:", color = Color(0xFFCBE3FB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = genre,
+                            onValueChange = { genre = it },
+                            modifier = Modifier.height(44.dp).testTag("edit_genre_input"),
+                            placeholder = { Text("Ej: Rock, Techno", color = Color.Gray, fontSize = 11.sp) },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x301A2B3C),
+                                unfocusedContainerColor = Color(0x10000000),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color(0xFF33AAFF)
+                            ),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+                    }
+
+                    // Year Input
+                    Column(modifier = Modifier.weight(1.2f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Año de lanzamiento:", color = Color(0xFFCBE3FB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = year,
+                            onValueChange = { year = it },
+                            modifier = Modifier.height(44.dp).testTag("edit_year_input"),
+                            placeholder = { Text("Ej: 2007, 1999", color = Color.Gray, fontSize = 11.sp) },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x301A2B3C),
+                                unfocusedContainerColor = Color(0x10000000),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color(0xFF33AAFF)
+                            ),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancelar", color = Color(0xFFBACADFEE), fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Button(
+                        onClick = {
+                            if (title.isNotBlank()) {
+                                onSave(title, artist, album, genre, year)
+                                onDismiss()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
+                        modifier = Modifier.testTag("save_metadata_button")
+                    ) {
+                        Text("Guardar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Windows Media Player 11 navigation categories.
+ */
+enum class WmpCategory(val title: String, val icon: ImageVector) {
+    BIBLIOTECA("Biblioteca", Icons.Default.LibraryMusic),
+    ARTISTAS("Artistas", Icons.Default.Person),
+    ALBUMES("Álbumes", Icons.Default.Album),
+    GENEROS("Géneros", Icons.Default.Category),
+    PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.PlaylistPlay),
+    FAVORITOS("Favoritos", Icons.Default.Favorite),
+    REPRODUCCION("Reproducción", Icons.Default.PlayCircle),
+    CONFIGURACION("Configuración", Icons.Default.Settings)
+}
+
+/**
+ * Reusable Windows Media Player 11 glass sidebar drawer panels.
+ */
+@Composable
+fun WmpSidebarPanel(
+    selectedCategory: WmpCategory,
+    onCategorySelect: (WmpCategory) -> Unit,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit
+) {
+    AeroGlassCard(
+        modifier = Modifier
+            .width(if (expanded) 160.dp else 52.dp)
+            .fillMaxHeight(),
+        cornerRadius = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = if (expanded) Arrangement.SpaceBetween else Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (expanded) {
+                    Text(
+                        text = "ORGANIZAR",
+                        color = Color(0xFFA5CADF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ArrowBack else Icons.Default.Menu,
+                        contentDescription = "Colapsar/Expandir",
+                        tint = Color(0xFF88C9FF),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                WmpCategory.values().forEach { category ->
+                    val isSelected = selectedCategory == category
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(
+                                if (isSelected) Color(0x3B33AAFF) else Color.Transparent
+                            )
+                            .border(
+                                1.dp,
+                                if (isSelected) Color(0x7F5ED8FF) else Color.Transparent,
+                                RoundedCornerShape(3.dp)
+                            )
+                            .clickable { onCategorySelect(category) }
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = category.icon,
+                            contentDescription = category.title,
+                            tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFF9FC2D8),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        if (expanded) {
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = category.title,
+                                color = if (isSelected) Color.White else Color(0xFFE2F0FD),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Windows Media Player Artists pane.
+ */
+@Composable
+fun ArtistsView(
+    allTracks: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onTrackSelect: (Track) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddPlaylist: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit
+) {
+    val artists = remember(allTracks) {
+        listOf("Todos") + allTracks.map { it.artist }.distinct().filter { it.isNotBlank() }.sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    var selectedArtist by remember { mutableStateOf("Todos") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val artistTracks = remember(allTracks, selectedArtist, searchQuery) {
+        val base = if (selectedArtist == "Todos") allTracks else allTracks.filter { it.artist == selectedArtist }
+        if (searchQuery.isBlank()) base else base.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+            it.album.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        AeroGlassCard(
+            modifier = Modifier
+                .width(125.dp)
+                .fillMaxHeight(),
+            cornerRadius = 4.dp
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Artistas (${artists.size - 1})",
+                        color = Color(0xFFBACADFEE),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+                items(artists) { artist ->
+                    val isSelected = selectedArtist == artist
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSelected) Color(0x3B33AAFF) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color(0x7F5ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
+                            .clickable { selectedArtist = artist }
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFFA1CADF),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = artist,
+                            color = if (isSelected) Color.White else Color(0xFFE2F0FD),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            LibraryView(
+                filteredTracks = artistTracks,
+                currentTrack = currentTrack,
+                isPlaying = isPlaying,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                onTrackSelect = onTrackSelect,
+                onFavoriteToggle = onFavoriteToggle,
+                onAddPlaylist = onAddPlaylist,
+                selectedTracks = selectedTracks,
+                onToggleSelect = onToggleSelect,
+                onClearSelection = onClearSelection,
+                onBulkAddPlaylist = onBulkAddPlaylist,
+                onBulkFavoriteToggle = onBulkFavoriteToggle,
+                onBulkDelete = onBulkDelete,
+                onEditMetadata = onEditMetadata
+            )
+        }
+    }
+}
+
+/**
+ * Windows Media Player Albums pane.
+ */
+@Composable
+fun AlbumsView(
+    allTracks: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onTrackSelect: (Track) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddPlaylist: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit
+) {
+    val albums = remember(allTracks) {
+        listOf("Todos") + allTracks.map { it.album }.distinct().filter { it.isNotBlank() }.sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    var selectedAlbum by remember { mutableStateOf("Todos") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val albumTracks = remember(allTracks, selectedAlbum, searchQuery) {
+        val base = if (selectedAlbum == "Todos") allTracks else allTracks.filter { it.album == selectedAlbum }
+        if (searchQuery.isBlank()) base else base.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+            it.artist.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        AeroGlassCard(
+            modifier = Modifier
+                .width(125.dp)
+                .fillMaxHeight(),
+            cornerRadius = 4.dp
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Álbumes (${albums.size - 1})",
+                        color = Color(0xFFBACADFEE),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+                items(albums) { album ->
+                    val isSelected = selectedAlbum == album
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSelected) Color(0x3B33AAFF) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color(0x7F5ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
+                            .clickable { selectedAlbum = album }
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Album,
+                            contentDescription = null,
+                            tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFFA1CADF),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = album,
+                            color = if (isSelected) Color.White else Color(0xFFE2F0FD),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            LibraryView(
+                filteredTracks = albumTracks,
+                currentTrack = currentTrack,
+                isPlaying = isPlaying,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                onTrackSelect = onTrackSelect,
+                onFavoriteToggle = onFavoriteToggle,
+                onAddPlaylist = onAddPlaylist,
+                selectedTracks = selectedTracks,
+                onToggleSelect = onToggleSelect,
+                onClearSelection = onClearSelection,
+                onBulkAddPlaylist = onBulkAddPlaylist,
+                onBulkFavoriteToggle = onBulkFavoriteToggle,
+                onBulkDelete = onBulkDelete,
+                onEditMetadata = onEditMetadata
+            )
+        }
+    }
+}
+
+/**
+ * Windows Media Player Genres pane.
+ */
+@Composable
+fun GenresView(
+    allTracks: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onTrackSelect: (Track) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddPlaylist: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit
+) {
+    val genres = remember(allTracks) {
+        listOf("Todos") + allTracks.map { it.genre ?: "Desconocido" }.filter { it.isNotBlank() }.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
+    var selectedGenre by remember { mutableStateOf("Todos") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val genreTracks = remember(allTracks, selectedGenre, searchQuery) {
+        val base = if (selectedGenre == "Todos") allTracks else allTracks.filter { (it.genre ?: "Desconocido") == selectedGenre }
+        if (searchQuery.isBlank()) base else base.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+            it.artist.contains(searchQuery, ignoreCase = true) ||
+            it.album.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        AeroGlassCard(
+            modifier = Modifier
+                .width(125.dp)
+                .fillMaxHeight(),
+            cornerRadius = 4.dp
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Géneros (${genres.size - 1})",
+                        color = Color(0xFFBACADFEE),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+                items(genres) { genre ->
+                    val isSelected = selectedGenre == genre
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSelected) Color(0x3B33AAFF) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color(0x7F5ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
+                            .clickable { selectedGenre = genre }
+                            .padding(horizontal = 6.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Category,
+                            contentDescription = null,
+                            tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFFA1CADF),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = genre,
+                            color = if (isSelected) Color.White else Color(0xFFE2F0FD),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            LibraryView(
+                filteredTracks = genreTracks,
+                currentTrack = currentTrack,
+                isPlaying = isPlaying,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                onTrackSelect = onTrackSelect,
+                onFavoriteToggle = onFavoriteToggle,
+                onAddPlaylist = onAddPlaylist,
+                selectedTracks = selectedTracks,
+                onToggleSelect = onToggleSelect,
+                onClearSelection = onClearSelection,
+                onBulkAddPlaylist = onBulkAddPlaylist,
+                onBulkFavoriteToggle = onBulkFavoriteToggle,
+                onBulkDelete = onBulkDelete,
+                onEditMetadata = onEditMetadata
+            )
+        }
+    }
+}
+
+/**
+ * Windows Media Player Playlists pane integrated sidebar view.
+ */
+@Composable
+fun PlaylistsPaneView(
+    playlists: List<Playlist>,
+    selectedPlaylist: Playlist?,
+    selectedPlaylistTracks: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onSelectPlaylist: (Playlist?) -> Unit,
+    onDeletePlaylist: (Playlist) -> Unit,
+    onTrackSelect: (Track, List<Track>) -> Unit,
+    onRemoveFromPlaylist: (Track, Playlist) -> Unit,
+    onCreatePlaylistClick: () -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    val playlistTracksFiltered = remember(selectedPlaylistTracks, searchQuery) {
+        if (searchQuery.isBlank()) selectedPlaylistTracks else selectedPlaylistTracks.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+            it.artist.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        AeroGlassCard(
+            modifier = Modifier
+                .width(130.dp)
+                .fillMaxHeight(),
+            cornerRadius = 4.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Button(
+                    onClick = onCreatePlaylistClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(6.dp)
+                        .height(30.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007ECC)),
+                    contentPadding = PaddingValues(0.dp),
+                    shape = RoundedCornerShape(2.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Nueva Lista", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Mis Listas (${playlists.size})",
+                            color = Color(0xFFBACADFEE),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(6.dp)
+                        )
+                    }
+                    items(playlists) { playlist ->
+                        val isSelected = selectedPlaylist?.id == playlist.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(if (isSelected) Color(0x3B33AAFF) else Color.Transparent)
+                                .border(1.dp, if (isSelected) Color(0x7F5ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
+                                .clickable { onSelectPlaylist(playlist) }
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
+                                    contentDescription = null,
+                                    tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFFA1CADF),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = playlist.name,
+                                    color = if (isSelected) Color.White else Color(0xFFE2F0FD),
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDeletePlaylist(playlist) },
+                                modifier = Modifier.size(16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Eliminar de la lista",
+                                    tint = Color(0x90FF6B6B),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            if (selectedPlaylist == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AeroGlassCard(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        cornerRadius = 4.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, modifier = Modifier.size(44.dp), tint = Color(0xFF5ED0FF))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Ninguna lista seleccionada",
+                                color = Color(0xFFCBE3FB),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Elige una lista de reproducción del lateral izquierdo para ver o reproducir sus temas, o crea una nueva lista.",
+                                color = Color(0xAAFFFFFF),
+                                fontSize = 10.sp,
+                                lineHeight = 15.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else {
+                LibraryView(
+                    filteredTracks = playlistTracksFiltered,
+                    currentTrack = currentTrack,
+                    isPlaying = isPlaying,
+                    searchQuery = searchQuery,
+                    onSearchChange = { searchQuery = it },
+                    onTrackSelect = { track -> onTrackSelect(track, selectedPlaylistTracks) },
+                    onFavoriteToggle = onFavoriteToggle,
+                    onAddPlaylist = {},
+                    selectedTracks = selectedTracks,
+                    onToggleSelect = onToggleSelect,
+                    onClearSelection = onClearSelection,
+                    onBulkAddPlaylist = onBulkAddPlaylist,
+                    onBulkFavoriteToggle = onBulkFavoriteToggle,
+                    onBulkDelete = onBulkDelete,
+                    onEditMetadata = onEditMetadata,
+                    onRemoveFromPlaylist = { track -> onRemoveFromPlaylist(track, selectedPlaylist) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Windows Media Player Favorites pane view.
+ */
+@Composable
+fun FavoritesPaneView(
+    favoriteTracks: List<Track>,
+    currentTrack: Track?,
+    isPlaying: Boolean,
+    onTrackSelect: (Track) -> Unit,
+    onFavoriteToggle: (Track) -> Unit,
+    onAddPlaylist: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit,
+    onEditMetadata: (Track) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredFavorites = remember(favoriteTracks, searchQuery) {
+        if (searchQuery.isBlank()) favoriteTracks else favoriteTracks.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+            it.artist.contains(searchQuery, ignoreCase = true) ||
+            it.album.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        LibraryView(
+            filteredTracks = filteredFavorites,
+            currentTrack = currentTrack,
+            isPlaying = isPlaying,
+            searchQuery = searchQuery,
+            onSearchChange = { searchQuery = it },
+            onTrackSelect = onTrackSelect,
+            onFavoriteToggle = onFavoriteToggle,
+            onAddPlaylist = onAddPlaylist,
+            selectedTracks = selectedTracks,
+            onToggleSelect = onToggleSelect,
+            onClearSelection = onClearSelection,
+            onBulkAddPlaylist = onBulkAddPlaylist,
+            onBulkFavoriteToggle = onBulkFavoriteToggle,
+            onBulkDelete = onBulkDelete,
+            onEditMetadata = onEditMetadata
+        )
+    }
+}
+
+/**
+ * Windows Media Player integrated settings pane.
+ */
+@Composable
+fun SettingsPaneView(
+    viewModel: AeroViewModel
+) {
+    val scannedFolders by viewModel.scannedFolders.collectAsStateWithLifecycle()
+    val ignoredFolders by viewModel.ignoredFolders.collectAsStateWithLifecycle()
+
+    var newScanPath by remember { mutableStateOf("") }
+    var newIgnorePath by remember { mutableStateOf("") }
+
+    var activeSubTab by remember { mutableStateOf(0) } // 0 = Escanear, 1 = Ignorar
+
+    AeroGlassCard(
+        modifier = Modifier.fillMaxSize(),
+        cornerRadius = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp)
+        ) {
+            Text(
+                text = "Configuración de Biblioteca",
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+                    .background(Color(0x1F000000), RoundedCornerShape(4.dp))
+                    .padding(2.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                val configTabs = listOf("Carpetas a Escanear", "Filtros de Ignorado")
+                configTabs.forEachIndexed { idx, title ->
+                    val isSel = (activeSubTab == idx)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSel) Color(0x3B0088DD) else Color.Transparent)
+                            .border(1.dp, if (isSel) Color(0x805ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
+                            .clickable { activeSubTab = idx }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            color = if (isSel) Color.White else Color(0xBACADFEE),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            if (activeSubTab == 0) {
+                Text(
+                    text = "Carpetas a escanear",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Por defecto busca en todo el almacenamiento. Si agregas carpetas, solo escaneará el subdirectorio indicado de forma optimizada.",
+                    color = Color(0xFFA1CADF),
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newScanPath,
+                        onValueChange = { newScanPath = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp),
+                        placeholder = { Text("Ej: Music/AeroPlayer", color = Color.Gray, fontSize = 11.sp) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0x301A2B3C),
+                            unfocusedContainerColor = Color(0x10000000),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF33AAFF)
+                        ),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Button(
+                        onClick = {
+                            if (newScanPath.isNotBlank()) {
+                                viewModel.addScannedFolder(newScanPath)
+                                newScanPath = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
+                        modifier = Modifier.height(38.dp),
+                        shape = RoundedCornerShape(2.dp)
+                    ) {
+                        Text("Añadir", fontSize = 11.sp, color = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                        .background(Color(0x15000000))
+                        .padding(4.dp)
+                ) {
+                    if (scannedFolders.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(scannedFolders) { path ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { viewModel.removeScannedFolder(path) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "Carpetas excluidas (Ignorar)",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Introduce nombres de carpeta para omitir durante el escaneo automático de archivos multimedia (ej: WhatsApp/Media, cancioneros).",
+                    color = Color(0xFFA1CADF),
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newIgnorePath,
+                        onValueChange = { newIgnorePath = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp),
+                        placeholder = { Text("Ej: WhatsApp/Media", color = Color.Gray, fontSize = 11.sp) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0x301A2B3C),
+                            unfocusedContainerColor = Color(0x10000000),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedIndicatorColor = Color(0xFF33AAFF)
+                        ),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Button(
+                        onClick = {
+                            if (newIgnorePath.isNotBlank()) {
+                                viewModel.addIgnoredFolder(newIgnorePath)
+                                newIgnorePath = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
+                        modifier = Modifier.height(38.dp),
+                        shape = RoundedCornerShape(2.dp)
+                    ) {
+                        Text("Excluir", fontSize = 11.sp, color = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                        .background(Color(0x15000000))
+                        .padding(4.dp)
+                ) {
+                    if (ignoredFolders.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No hay filtros activos (escanea todo libremente)", color = Color.LightGray, fontSize = 11.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(ignoredFolders) { path ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { viewModel.removeIgnoredFolder(path) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

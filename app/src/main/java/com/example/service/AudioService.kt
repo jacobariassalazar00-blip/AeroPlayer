@@ -488,7 +488,15 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
             .setMediaSession(mediaSession?.sessionToken)
             .setShowActionsInCompactView(0, 1, 2)
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val largeIconBitmap = if (!track?.coverPath.isNullOrEmpty()) {
+            try {
+                android.graphics.BitmapFactory.decodeFile(track?.coverPath)
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(com.example.R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist)
@@ -501,7 +509,12 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
             .addAction(playPauseIcon, if (isPlaying.value) "Pausa" else "Reproducir", pendingPlayPause)
             .addAction(android.R.drawable.ic_media_next, "Siguiente", pendingNext)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cerrar", pendingStop)
-            .build()
+
+        if (largeIconBitmap != null) {
+            builder.setLargeIcon(largeIconBitmap)
+        }
+
+        return builder.build()
     }
 
     override fun onDestroy() {
