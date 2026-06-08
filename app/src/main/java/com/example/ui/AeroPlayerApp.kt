@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -113,8 +115,11 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
     var showPlaylistSelectorForSelection by remember { mutableStateOf(false) }
 
     // Windows Media Player 11 navigation category state
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var activeCategory by remember { mutableStateOf(WmpCategory.BIBLIOTECA) }
-    var sidebarExpanded by remember { mutableStateOf(true) }
+    var sidebarExpanded by remember(isLandscape) { mutableStateOf(isLandscape) }
 
     // Layout Root Box (Cosmic gradient background with water bubbles)
     Box(
@@ -194,10 +199,16 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .padding(
+                        horizontal = if (isLandscape) 12.dp else 6.dp,
+                        vertical = if (isLandscape) 4.dp else 2.dp
+                    )
                     .background(color = Color(0x1B000000), shape = RoundedCornerShape(4.dp))
                     .border(width = 1.dp, color = Color(0x1AFFFFFF), shape = RoundedCornerShape(4.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(
+                        horizontal = if (isLandscape) 10.dp else 6.dp,
+                        vertical = if (isLandscape) 6.dp else 3.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Backward arrow button (quick link back to Biblioteca standard)
@@ -205,7 +216,7 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                     onClick = { activeCategory = WmpCategory.BIBLIOTECA },
                     enabled = activeCategory != WmpCategory.BIBLIOTECA,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(if (isLandscape) 24.dp else 20.dp)
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = if (activeCategory != WmpCategory.BIBLIOTECA)
@@ -225,42 +236,44 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Volver a Biblioteca",
                         tint = if (activeCategory != WmpCategory.BIBLIOTECA) Color.White else Color.Gray,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(if (isLandscape) 12.dp else 10.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(if (isLandscape) 10.dp else 6.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "Música de Biblioteca",
+                        text = "Biblioteca",
                         color = Color(0xFFCBE3FB),
-                        fontSize = 11.sp,
+                        fontSize = if (isLandscape) 11.sp else 9.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "  ►  ",
+                        text = " ► ",
                         color = Color(0x50FFFFFF),
-                        fontSize = 10.sp,
+                        fontSize = if (isLandscape) 10.sp else 8.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = activeCategory.title,
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = if (isLandscape) 11.sp else 9.5.sp,
                         fontWeight = FontWeight.Black
                     )
                 }
 
-                Text(
-                    text = "Windows Media Player 11",
-                    color = Color(0x7DDFEFFF),
-                    fontSize = 10.sp,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                )
+                if (isLandscape) {
+                    Text(
+                        text = "Windows Media Player 11",
+                        color = Color(0x7DDFEFFF),
+                        fontSize = 10.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
             }
 
             // Glass banner if permissions are disabled
@@ -700,10 +713,21 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
 fun AeroTitleBar(
     actions: @Composable () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val height = if (isLandscape) 44.dp else 34.dp
+    val badgeSize = if (isLandscape) 24.dp else 18.dp
+    val badgeIconSize = if (isLandscape) 13.dp else 9.dp
+    val fontSize = if (isLandscape) 13.sp else 11.sp
+    val textVal = if (isLandscape) "AeroPlayer   WMP 12 Reimagined" else "AeroPlayer"
+    val systemBoxWidth = if (isLandscape) 18.dp else 12.dp
+    val systemBoxHeight = if (isLandscape) 14.dp else 10.dp
+    val redBoxWidth = if (isLandscape) 22.dp else 16.dp
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height)
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(Color(0x3BFFFFFF), Color(0x06FFFFFF))
@@ -719,7 +743,7 @@ fun AeroTitleBar(
                     strokeWidth = strokeWidth
                 )
             }
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = if (isLandscape) 16.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -727,7 +751,7 @@ fun AeroTitleBar(
             // WMP classic icon badge logo
             Box(
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(badgeSize)
                     .background(
                         brush = Brush.radialGradient(
                             colors = listOf(Color(0xFF33AAFF), Color(0xFF003F80))
@@ -740,15 +764,15 @@ fun AeroTitleBar(
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = null,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(badgeIconSize),
                     tint = Color.White
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(if (isLandscape) 10.dp else 6.dp))
             Text(
-                text = "AeroPlayer   WMP 12 Reimagined",
+                text = textVal,
                 color = Color(0xFFE4F3FF),
-                fontSize = 14.sp,
+                fontSize = fontSize,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.SansSerif
             )
@@ -756,13 +780,13 @@ fun AeroTitleBar(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             actions()
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(if (isLandscape) 6.dp else 4.dp))
 
             // Glossy classic titlebar system control buttons (close/min placeholders)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.size(20.dp, 16.dp).background(Color(0x25FFFFFF), RoundedCornerShape(2.dp)))
-                Box(modifier = Modifier.size(20.dp, 16.dp).background(Color(0x25FFFFFF), RoundedCornerShape(2.dp)))
-                Box(modifier = Modifier.size(24.dp, 16.dp).background(Color(0x60FF4242), RoundedCornerShape(2.dp)))
+            Row(horizontalArrangement = Arrangement.spacedBy(if (isLandscape) 4.dp else 2.dp)) {
+                Box(modifier = Modifier.size(systemBoxWidth, systemBoxHeight).background(Color(0x25FFFFFF), RoundedCornerShape(2.dp)))
+                Box(modifier = Modifier.size(systemBoxWidth, systemBoxHeight).background(Color(0x25FFFFFF), RoundedCornerShape(2.dp)))
+                Box(modifier = Modifier.size(redBoxWidth, systemBoxHeight).background(Color(0x60FF4242), RoundedCornerShape(2.dp)))
             }
         }
     }
@@ -1840,6 +1864,9 @@ fun WmpBottomPlayerBar(
     onToggleRepeat: () -> Unit,
     onMaximizedClick: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     val duration = currentTrack?.duration ?: 0L
     val durationText = currentTrack?.durationText ?: "0:00"
 
@@ -1847,75 +1874,46 @@ fun WmpBottomPlayerBar(
     val elapsedSeconds = (currentPosition / 1000) % 60
     val elapsedText = String.format("%d:%02d", elapsedMinutes, elapsedSeconds)
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0F1E31), // Deep Cobalt Slate
-                        Color(0xFF040A12)  // Full Dark
+    if (isLandscape) {
+        // Landscape (Horizontal) highly compact single-row deck layout which saves huge screen space
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0F1E31), // Deep Cobalt Slate
+                            Color(0xFF040A12)  // Full Dark
+                        )
                     )
                 )
-            )
-            .windowInsetsPadding(WindowInsets.navigationBars) // Bottom safe area boundary
-            .padding(top = 8.dp, bottom = 12.dp, start = 16.dp, end = 16.dp)
-    ) {
-        // Horizontal top division line (Vista styling thin border)
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0x3B5ED8FF)))
-        Spacer(modifier = Modifier.height(4.dp))
-        // 1. Sliding Seekbar track with shiny cyan path slider
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(text = elapsedText, color = Color(0xFF88C9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-
-            Slider(
-                value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
-                onValueChange = { percent ->
-                    if (duration > 0) {
-                        onSeek((percent * duration).toLong())
-                    }
-                },
-                modifier = Modifier.weight(1f).testTag("playback_slider"),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color(0xFF51A651), // Vista gloss green
-                    inactiveTrackColor = Color(0xFFC4D5E6) // Matte metallic silver-blue
-                )
-            )
-
-            Text(text = durationText, color = Color(0xFF7ED2FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 2. Control Layout
-        Row(
-            modifier = Modifier.fillMaxWidth(),
+                .navigationBarsPadding()
+                .padding(vertical = 1.dp, horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left block: Small mini screen presenting active track details
+            // Horizontal top division thin line
+            Box(modifier = Modifier.height(24.dp).width(1.dp).background(Color(0x1B5ED8FF)))
+
+            // Left block: Compact active track details
             Row(
                 modifier = Modifier
-                    .weight(2.2f)
-                    .clickable(onClick = onMaximizedClick),
+                    .weight(1.5f)
+                    .clickable(onClick = onMaximizedClick)
+                    .padding(end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (currentTrack != null) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(24.dp)
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(Color(0xFF0091FF), Color(0xFF002F5E))
                                 ),
-                                shape = RoundedCornerShape(4.dp)
+                                shape = RoundedCornerShape(2.dp)
                             )
-                            .border(1.dp, Color(0x3BFFFFFF), RoundedCornerShape(4.dp)),
+                            .border(1.dp, Color(0x2BFFFFFF), RoundedCornerShape(2.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         if (!currentTrack.coverPath.isNullOrEmpty() && java.io.File(currentTrack.coverPath).exists()) {
@@ -1925,19 +1923,19 @@ fun WmpBottomPlayerBar(
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = "Carátula",
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)),
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(2.dp)),
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
                             )
                         } else {
-                            Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                            Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(11.dp), tint = Color.White)
                         }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Column {
                         Text(
                             text = currentTrack.title,
                             color = Color.White,
-                            fontSize = 13.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1945,7 +1943,7 @@ fun WmpBottomPlayerBar(
                         Text(
                             text = currentTrack.artist,
                             color = Color(0xFF8AC7EE),
-                            fontSize = 11.sp,
+                            fontSize = 8.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1954,67 +1952,272 @@ fun WmpBottomPlayerBar(
                     Text(
                         text = "Sin reproducción",
                         color = Color(0x60FFFFFF),
-                        fontSize = 12.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // Middle block: Glowing Circular ORB panel
+            // Middle Left block: Playback compact Orbs (scaled down dynamically)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 2.dp)
             ) {
                 AeroMediaNavButton(
                     icon = Icons.Default.SkipPrevious,
                     contentDescription = "Anterior",
-                    tag = "previous_button",
-                    onClick = onPrevious
+                    tag = "previous_button_compact",
+                    onClick = onPrevious,
+                    baseSize = 24.dp
                 )
 
                 PlayPauseOrb(
                     isPlaying = isPlaying,
-                    onClick = onPlayPause
+                    onClick = onPlayPause,
+                    baseSize = 30.dp
                 )
 
                 AeroMediaNavButton(
                     icon = Icons.Default.SkipNext,
                     contentDescription = "Siguiente",
-                    tag = "next_button",
-                    onClick = onNext
+                    tag = "next_button_compact",
+                    onClick = onNext,
+                    baseSize = 24.dp
                 )
             }
 
-            // Right block: Shuffle, block repeat loop buttons
+            // Middle Right block: Slide seekbar taking up the remaining horizontal area beautifully
             Row(
-                modifier = Modifier.weight(0.8f),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .weight(3.8f)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(text = elapsedText, color = Color(0xFF88C9FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+
+                Slider(
+                    value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
+                    onValueChange = { percent ->
+                        if (duration > 0) {
+                            onSeek((percent * duration).toLong())
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(12.dp).testTag("playback_slider"),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Color(0xFF51A651), // Vista gloss green
+                        inactiveTrackColor = Color(0xFFC4D5E6) // Silver
+                    )
+                )
+
+                Text(text = durationText, color = Color(0xFF7ED2FF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Right block: Compact Shuffle & Repeat controls
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
             ) {
                 // Shuffle selector
                 IconButton(
                     onClick = onToggleShuffle,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
                         contentDescription = "Shuffle",
                         tint = if (isShuffle) Color(0xFF00FFEA) else Color(0xAAFFFFFF),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(11.dp)
                     )
                 }
 
                 // Repeat selector
                 IconButton(
                     onClick = onToggleRepeat,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
                         imageVector = if (isRepeatSingle) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                         contentDescription = "Bucle",
                         tint = if (isRepeatSingle) Color(0xFF00FFEA) else Color(0xAAFFFFFF),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(11.dp)
                     )
+                }
+            }
+        }
+    } else {
+        // Vertical (Portrait) standard layout
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0F1E31), // Deep Cobalt Slate
+                            Color(0xFF040A12)  // Full Dark
+                        )
+                    )
+                )
+                .windowInsetsPadding(WindowInsets.navigationBars) // Bottom safe area boundary
+                .padding(top = 8.dp, bottom = 12.dp, start = 16.dp, end = 16.dp)
+        ) {
+            // Horizontal top division line (Vista styling thin border)
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0x3B5ED8FF)))
+            Spacer(modifier = Modifier.height(4.dp))
+            // 1. Sliding Seekbar track with shiny cyan path slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(text = elapsedText, color = Color(0xFF88C9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+                Slider(
+                    value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
+                    onValueChange = { percent ->
+                        if (duration > 0) {
+                            onSeek((percent * duration).toLong())
+                        }
+                    },
+                    modifier = Modifier.weight(1f).testTag("playback_slider"),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Color(0xFF51A651), // Vista gloss green
+                        inactiveTrackColor = Color(0xFFC4D5E6) // Matte metallic silver-blue
+                    )
+                )
+
+                Text(text = durationText, color = Color(0xFF7ED2FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 2. Control Layout
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left block: Small mini screen presenting active track details
+                Row(
+                    modifier = Modifier
+                        .weight(2.2f)
+                        .clickable(onClick = onMaximizedClick),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (currentTrack != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(Color(0xFF0091FF), Color(0xFF002F5E))
+                                    ),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .border(1.dp, Color(0x3BFFFFFF), RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!currentTrack.coverPath.isNullOrEmpty() && java.io.File(currentTrack.coverPath).exists()) {
+                                coil.compose.AsyncImage(
+                                    model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                        .data(java.io.File(currentTrack.coverPath))
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Carátula",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = currentTrack.title,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = currentTrack.artist,
+                                color = Color(0xFF8AC7EE),
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Sin reproducción",
+                            color = Color(0x60FFFFFF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Middle block: Glowing Circular ORB panel
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AeroMediaNavButton(
+                        icon = Icons.Default.SkipPrevious,
+                        contentDescription = "Anterior",
+                        tag = "previous_button",
+                        onClick = onPrevious
+                    )
+
+                    PlayPauseOrb(
+                        isPlaying = isPlaying,
+                        onClick = onPlayPause
+                    )
+
+                    AeroMediaNavButton(
+                        icon = Icons.Default.SkipNext,
+                        contentDescription = "Siguiente",
+                        tag = "next_button",
+                        onClick = onNext
+                    )
+                }
+
+                // Right block: Shuffle, block repeat loop buttons
+                Row(
+                    modifier = Modifier.weight(0.8f),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Shuffle selector
+                    IconButton(
+                        onClick = onToggleShuffle,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (isShuffle) Color(0xFF00FFEA) else Color(0xAAFFFFFF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Repeat selector
+                    IconButton(
+                        onClick = onToggleRepeat,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isRepeatSingle) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "Bucle",
+                            tint = if (isRepeatSingle) Color(0xFF00FFEA) else Color(0xAAFFFFFF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -2201,13 +2404,18 @@ fun AeroClassyDialogLayout(
             )
             .border(2.dp, Color(0x605ED8FF), RoundedCornerShape(16.dp))
             .drawBehind {
-                // Gloss effect on top portion
+                // Gloss effect on top portion with rounded corners
                 val topBrush = Brush.verticalGradient(
-                    colors = listOf(Color(0x35FFFFFF), Color.Transparent),
+                    colors = listOf(Color(0x28FFFFFF), Color.Transparent),
                     startY = 0f,
                     endY = size.height * 0.35f
                 )
-                drawRect(brush = topBrush, size = Size(size.width, size.height * 0.35f))
+                val r = 16.dp.toPx()
+                drawRoundRect(
+                    brush = topBrush,
+                    size = size,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r)
+                )
             }
             .padding(16.dp)
     ) {
@@ -2815,9 +3023,21 @@ fun WmpSidebarPanel(
     expanded: Boolean,
     onToggleExpand: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val expandedWidth = if (isLandscape) 160.dp else 116.dp
+    val collapsedWidth = if (isLandscape) 52.dp else 34.dp
+    val itemPaddingVer = if (isLandscape) 8.dp else 4.dp
+    val itemPaddingHor = if (isLandscape) 8.dp else 4.dp
+    val iconSize = if (isLandscape) 16.dp else 13.dp
+    val fontSize = if (isLandscape) 11.sp else 9.5.sp
+    val spacingBetweenItems = if (isLandscape) 4.dp else 1.dp
+    val topSpacerHeight = if (isLandscape) 10.dp else 3.dp
+
     AeroGlassCard(
         modifier = Modifier
-            .width(if (expanded) 160.dp else 52.dp)
+            .width(if (expanded) expandedWidth else collapsedWidth)
             .fillMaxHeight(),
         cornerRadius = 4.dp
     ) {
@@ -2856,11 +3076,11 @@ fun WmpSidebarPanel(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(topSpacerHeight))
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(spacingBetweenItems)
             ) {
                 WmpCategory.values().forEach { category ->
                     val isSelected = selectedCategory == category
@@ -2878,7 +3098,7 @@ fun WmpSidebarPanel(
                                 RoundedCornerShape(3.dp)
                             )
                             .clickable { onCategorySelect(category) }
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .padding(horizontal = itemPaddingHor, vertical = itemPaddingVer),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
                     ) {
@@ -2886,14 +3106,14 @@ fun WmpSidebarPanel(
                             imageVector = category.icon,
                             contentDescription = category.title,
                             tint = if (isSelected) Color(0xFF5ED8FF) else Color(0xFF9FC2D8),
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(iconSize)
                         )
                         if (expanded) {
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(if (isLandscape) 10.dp else 6.dp))
                             Text(
                                 text = category.title,
                                 color = if (isSelected) Color.White else Color(0xFFE2F0FD),
-                                fontSize = 11.sp,
+                                fontSize = fontSize,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis

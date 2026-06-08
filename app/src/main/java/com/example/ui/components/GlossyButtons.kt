@@ -57,28 +57,29 @@ fun AeroGlassCard(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0x59FFFFFF),  // White 35% top glass fill
-                        Color(0x1F9FC7EE),  // Soft translucent sky tint
-                        Color(0x0EFFFFFF)   // Low opacity bottom
+                        Color(0x22FFFFFF),  // Ultra-sleek 13% top glass fill
+                        Color(0x0E9FC7EE),  // Delicate translucent sky tint
+                        Color(0x03FFFFFF)   // Soft transparent bottom sheen
                     )
                 ),
                 shape = RoundedCornerShape(cornerRadius)
             )
             .drawBehind {
                 val r = cornerRadius.toPx()
-                // 1. Draw shiny glare sweep (Aero highlight reflection)
+                // 1. Draw shiny glare sweep (Aero highlight reflection) respecting rounded corners
                 val glareBrush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0x66FFFFFF),
-                        Color(0x19FFFFFF),
-                        Color(0x00FFFFFF)
+                        Color(0x3BFFFFFF),  // Softer premium glare shine
+                        Color(0x0DFFFFFF),  // Smooth transition
+                        Color(0x00FFFFFF)   // Complete fade out
                     ),
                     start = Offset(0f, 0f),
-                    end = Offset(size.width, size.height * 0.5f)
+                    end = Offset(size.width * 0.8f, size.height * 0.70f)
                 )
-                drawRect(
+                drawRoundRect(
                     brush = glareBrush,
-                    size = Size(size.width, size.height * 0.5f)
+                    size = size,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(r, r)
                 )
 
                 // 2. High-precision borders representing 1px solid rgba(255,255,255,0.4)
@@ -119,7 +120,8 @@ fun AeroGlassCard(
 fun PlayPauseOrb(
     isPlaying: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier.size(68.dp)
+    modifier: Modifier = Modifier,
+    baseSize: androidx.compose.ui.unit.Dp = 68.dp
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -145,9 +147,9 @@ fun PlayPauseOrb(
     Box(
         modifier = modifier
             .testTag("play_pause_button")
-            .size((68 * hoverScale).dp)
+            .size((baseSize.value * hoverScale).dp)
             .shadow(
-                elevation = 12.dp,
+                elevation = if (baseSize < 50.dp) 6.dp else 12.dp,
                 shape = CircleShape,
                 ambientColor = Color(0xFF0078D7),
                 spotColor = Color.Black
@@ -212,7 +214,7 @@ fun PlayPauseOrb(
             }
             .clickable(
                 interactionSource = interactionSource,
-                indication = androidx.compose.material3.ripple(bounded = false, radius = 34.dp, color = Color.White),
+                indication = androidx.compose.material3.ripple(bounded = false, radius = if (baseSize < 50.dp) 20.dp else 34.dp, color = Color.White),
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -220,7 +222,7 @@ fun PlayPauseOrb(
         Icon(
             imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
             contentDescription = if (isPlaying) "Pausa" else "Reproducir",
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(if (baseSize < 50.dp) 20.dp else 32.dp),
             tint = Color(0xFFFFFFFF)
         )
     }
@@ -235,7 +237,8 @@ fun AeroMediaNavButton(
     contentDescription: String,
     onClick: () -> Unit,
     tag: String,
-    modifier: Modifier = Modifier.size(44.dp)
+    modifier: Modifier = Modifier,
+    baseSize: androidx.compose.ui.unit.Dp = 44.dp
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -263,7 +266,8 @@ fun AeroMediaNavButton(
     Box(
         modifier = modifier
             .testTag(tag)
-            .shadow(4.dp, CircleShape, ambientColor = Color(0x400078D7))
+            .size(baseSize)
+            .shadow(if (baseSize < 35.dp) 2.dp else 4.dp, CircleShape, ambientColor = Color(0x400078D7))
             .border(1.dp, Color(0x33FFFFFF), CircleShape) // thin white border-white/20
             .background(brush = backgroundBrush, shape = CircleShape)
             .drawBehind {
@@ -277,7 +281,7 @@ fun AeroMediaNavButton(
             }
             .clickable(
                 interactionSource = interactionSource,
-                indication = androidx.compose.material3.ripple(bounded = false, radius = 22.dp, color = Color.White),
+                indication = androidx.compose.material3.ripple(bounded = false, radius = if (baseSize < 35.dp) 12.dp else 22.dp, color = Color.White),
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -285,7 +289,7 @@ fun AeroMediaNavButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(if (baseSize < 35.dp) 14.dp else 20.dp),
             tint = Color.White
         )
     }
