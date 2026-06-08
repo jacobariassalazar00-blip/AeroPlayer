@@ -31,6 +31,46 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AeroDatabase.getDatabase(application)
     private val musicDao = database.musicDao()
 
+    // Folder and ignore configuration state using SharedPreferences
+    private val prefs = application.getSharedPreferences("aero_player_prefs", Context.MODE_PRIVATE)
+
+    private val _scannedFolders = MutableStateFlow<List<String>>(
+        prefs.getString("scanned_paths", "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+    )
+    val scannedFolders = _scannedFolders.asStateFlow()
+
+    private val _ignoredFolders = MutableStateFlow<List<String>>(
+        prefs.getString("ignored_paths", "Android/data,.thumbnails,WhatsApp/Media")?.split(",")?.filter { it.isNotBlank() }
+            ?: listOf("Android/data", ".thumbnails", "WhatsApp/Media")
+    )
+    val ignoredFolders = _ignoredFolders.asStateFlow()
+
+    fun addScannedFolder(path: String) {
+        if (path.isBlank()) return
+        val newList = (_scannedFolders.value + path.trim()).distinct()
+        _scannedFolders.value = newList
+        prefs.edit().putString("scanned_paths", newList.joinToString(",")).apply()
+    }
+
+    fun removeScannedFolder(path: String) {
+        val newList = _scannedFolders.value - path
+        _scannedFolders.value = newList
+        prefs.edit().putString("scanned_paths", newList.joinToString(",")).apply()
+    }
+
+    fun addIgnoredFolder(path: String) {
+        if (path.isBlank()) return
+        val newList = (_ignoredFolders.value + path.trim()).distinct()
+        _ignoredFolders.value = newList
+        prefs.edit().putString("ignored_paths", newList.joinToString(",")).apply()
+    }
+
+    fun removeIgnoredFolder(path: String) {
+        val newList = _ignoredFolders.value - path
+        _ignoredFolders.value = newList
+        prefs.edit().putString("ignored_paths", newList.joinToString(",")).apply()
+    }
+
     // Service Connection State
     private var audioService: AudioService? = null
     private var isBound = false
@@ -205,7 +245,16 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
                         val duration = c.getLong(durationCol)
                         val path = c.getString(dataCol) ?: ""
 
-                        if (path.isNotEmpty() && duration > 2000) { // filter out overly short sound effects
+                        // Directory inclusions & exclusions filter checks
+                        val isCorrectLocation = if (_scannedFolders.value.isEmpty()) {
+                            true
+                        } else {
+                            _scannedFolders.value.any { path.contains(it, ignoreCase = true) }
+                        }
+
+                        val isIgnored = _ignoredFolders.value.any { path.contains(it, ignoreCase = true) }
+
+                        if (isCorrectLocation && !isIgnored && path.isNotEmpty() && duration > 2000) {
                             scannedTracks.add(
                                 Track(
                                     title = title,
@@ -227,7 +276,9 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
                     musicDao.clearScannedTracks()
                     musicDao.insertTracks(scannedTracks)
                 } else {
-                    Log.d(TAG, "No local MediaStore tracks found (normal if on emulator/preview).")
+                    Log.d(TAG, "No local MediaStore tracks found or filtered out.")
+                    // Also clear non-synthetic cache if no files match
+                    musicDao.clearScannedTracks()
                 }
 
             } catch (e: Exception) {
@@ -333,6 +384,50 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
     fun removeTrackFromPlaylist(track: Track, playlist: Playlist) {
         viewModelScope.launch(Dispatchers.IO) {
             musicDao.removeTrackFromPlaylist(playlistId = playlist.id, trackId = track.id)
+        }
+    }
+
+    // Bulk deletion from library and optionally filesystem storage
+    fun deleteTracks(tracks: List<Track>, deletePhysicalFiles: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (deletePhysicalFiles) {
+                for (track in tracks) {
+                    if (!track.isSynthetic) {
+                        try {
+                            val file = java.io.File(track.path)
+                            if (file.exists()) {
+                                file.delete()
+                                Log.d(TAG, "Fichero borrado físicamente: ${track.path}")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "No se pudo borrar el fichero físico: ${track.path}", e)
+                        }
+                    }
+                }
+            }
+            val ids = tracks.map { it.id }
+            musicDao.deleteTracksById(ids)
+            Log.d(TAG, "Borrado de pistas del cache de Room: $ids")
+        }
+    }
+
+    // Interactive playback queue controllers (for queue editing)
+    fun removeTrackFromQueue(index: Int) {
+        audioService?.removeQueueTrack(index)
+    }
+
+    fun moveQueueTrack(fromIndex: Int, toIndex: Int) {
+        audioService?.moveQueueTrack(fromIndex, toIndex)
+    }
+
+    // Custom lyrics editing per track
+    fun saveLyrics(track: Track, newLyrics: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = track.copy(lyrics = newLyrics)
+            musicDao.updateTrack(updated)
+            if (_currentTrack.value?.id == track.id) {
+                _currentTrack.value = updated
+            }
         }
     }
 

@@ -169,6 +169,50 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
         }
     }
 
+    // Interactively remove track from queue
+    fun removeQueueTrack(index: Int) {
+        if (playlistTracks.isEmpty() || index !in playlistTracks.indices) return
+        val newTracks = playlistTracks.toMutableList()
+        newTracks.removeAt(index)
+        
+        if (index == currentTrackIndex) {
+            playlistTracks = newTracks
+            _playlist.value = newTracks
+            if (newTracks.isNotEmpty()) {
+                currentTrackIndex = index.coerceAtMost(newTracks.size - 1)
+                loadTrack(newTracks[currentTrackIndex], _isPlaying.value)
+            } else {
+                currentTrackIndex = -1
+                _currentTrack.value = null
+                _isPlaying.value = false
+                mediaPlayer?.reset()
+                updatePlaybackState()
+                updateNotification()
+            }
+        } else {
+            if (index < currentTrackIndex) {
+                currentTrackIndex--
+            }
+            playlistTracks = newTracks
+            _playlist.value = newTracks
+        }
+    }
+
+    // Interactively shift track indices in the active line-up/queue
+    fun moveQueueTrack(fromIndex: Int, toIndex: Int) {
+        if (playlistTracks.isEmpty() || fromIndex !in playlistTracks.indices || toIndex !in playlistTracks.indices) return
+        val newTracks = playlistTracks.toMutableList()
+        val track = newTracks.removeAt(fromIndex)
+        newTracks.add(toIndex, track)
+        
+        val playingTrack = _currentTrack.value
+        playlistTracks = newTracks
+        _playlist.value = newTracks
+        if (playingTrack != null) {
+            currentTrackIndex = newTracks.indexOfFirst { it.id == playingTrack.id }
+        }
+    }
+
     private fun loadTrack(track: Track, playImmediately: Boolean) {
         mediaPlayer?.reset()
         _currentTrack.value = track
@@ -445,7 +489,7 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
             .setShowActionsInCompactView(0, 1, 2)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(com.example.R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(artist)
             .setSubText(track?.album ?: "Álbum")

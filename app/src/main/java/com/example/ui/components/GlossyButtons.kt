@@ -41,7 +41,7 @@ import kotlin.math.sin
 @Composable
 fun AeroGlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 16.dp,
+    cornerRadius: Dp = 3.dp,
     glowColor: Color = Color(0x303AD1FF),
     content: @Composable BoxScope.() -> Unit
 ) {

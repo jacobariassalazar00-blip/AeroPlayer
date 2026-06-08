@@ -12,7 +12,8 @@ data class Track(
     val duration: Long, // in milliseconds
     val path: String, // filePath or contentUri
     val isFavorite: Boolean = false,
-    val isSynthetic: Boolean = false
+    val isSynthetic: Boolean = false,
+    val lyrics: String? = null
 ) {
     val durationText: String
         get() {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,6 +106,10 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
     // Modal Control Flags
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var trackForPlaylistSelector by remember { mutableStateOf<Track?>(null) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    val selectedTracks = remember { mutableStateListOf<Track>() }
+    var showBulkDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showPlaylistSelectorForSelection by remember { mutableStateOf(false) }
 
     // Active View Tab: 0 = Biblioteca, 1 = Listas de reproducción, 2 = Reproduciendo ahora
     var activeTab by remember { mutableStateOf(0) }
@@ -152,24 +157,34 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
         ) {
             // 1. Classic Windows Aero Titlebar
             AeroTitleBar {
-                // Quick Rescan button as an overlay
-                IconButton(
-                    onClick = {
-                        if (checkAudioPermissions(context)) {
-                            viewModel.scanLocalMusic()
-                            Toast.makeText(context, "Sincronizando biblioteca...", Toast.LENGTH_SHORT).show()
-                        } else {
-                            launcher.launch(
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                                    arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
-                                else
-                                    arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-                            )
-                        }
-                    },
-                    modifier = Modifier.testTag("rescan_library_button")
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Escanear almacenamiento", tint = Color(0xFFCBE3FB))
+                Row {
+                    // Quick Settings cog button
+                    IconButton(
+                        onClick = { showSettingsDialog = true },
+                        modifier = Modifier.testTag("settings_button")
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Configuración", tint = Color(0xFFCBE3FB))
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    // Quick Rescan button as an overlay
+                    IconButton(
+                        onClick = {
+                            if (checkAudioPermissions(context)) {
+                                viewModel.scanLocalMusic()
+                                Toast.makeText(context, "Sincronizando biblioteca...", Toast.LENGTH_SHORT).show()
+                            } else {
+                                launcher.launch(
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                                        arrayOf(Manifest.permission.READ_MEDIA_AUDIO)
+                                    else
+                                        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                )
+                            }
+                        },
+                        modifier = Modifier.testTag("rescan_library_button")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Escanear almacenamiento", tint = Color(0xFFCBE3FB))
+                    }
                 }
             }
 
@@ -244,9 +259,29 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                         isPlaying = isPlaying,
                         searchQuery = searchQuery,
                         onSearchChange = { viewModel.searchQuery.value = it },
-                        onTrackSelect = { track -> viewModel.playTrack(track) },
+                        onTrackSelect = { track -> viewModel.playTrack(track, filteredTracks) },
                         onFavoriteToggle = { track -> viewModel.toggleFavorite(track) },
-                        onAddPlaylist = { track -> trackForPlaylistSelector = track }
+                        onAddPlaylist = { track -> trackForPlaylistSelector = track },
+                        selectedTracks = selectedTracks,
+                        onToggleSelect = { track ->
+                            if (selectedTracks.contains(track)) {
+                                selectedTracks.remove(track)
+                            } else {
+                                selectedTracks.add(track)
+                            }
+                        },
+                        onClearSelection = { selectedTracks.clear() },
+                        onBulkAddPlaylist = { showPlaylistSelectorForSelection = true },
+                        onBulkFavoriteToggle = {
+                            val anyUnfavorite = selectedTracks.any { !it.isFavorite }
+                            selectedTracks.toList().forEach { track ->
+                                if (track.isFavorite != anyUnfavorite) {
+                                    viewModel.toggleFavorite(track)
+                                }
+                            }
+                            selectedTracks.clear()
+                        },
+                        onBulkDelete = { showBulkDeleteConfirmDialog = true }
                     )
                     1 -> PlaylistView(
                         playlists = playlists,
@@ -261,6 +296,7 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                         onCreatePlaylistClick = { showCreatePlaylistDialog = true }
                     )
                     2 -> NowPlayingView(
+                        viewModel = viewModel,
                         currentTrack = currentTrack,
                         isPlaying = isPlaying,
                         currentPosition = currentPosition,
@@ -304,6 +340,29 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
         )
     }
 
+    // Settings Dialog
+    if (showSettingsDialog) {
+        SettingsDialog(
+            viewModel = viewModel,
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    // Bulk Delete Confirmation Dialog
+    if (showBulkDeleteConfirmDialog) {
+        BulkDeleteConfirmDialog(
+            count = selectedTracks.size,
+            onConfirm = { deletePhysical ->
+                viewModel.deleteTracks(selectedTracks.toList(), deletePhysical)
+                selectedTracks.clear()
+                showBulkDeleteConfirmDialog = false
+                Toast.makeText(context, "Canciones eliminadas", Toast.LENGTH_SHORT).show()
+                viewModel.scanLocalMusic() // Refresh library following deletion
+            },
+            onDismiss = { showBulkDeleteConfirmDialog = false }
+        )
+    }
+
     // Add Track to Playlist dialog/picker
     trackForPlaylistSelector?.let { track ->
         PlaylistSelectorDialog(
@@ -319,6 +378,85 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
                 showCreatePlaylistDialog = true
             }
         )
+    }
+
+    // Playlist Selector Dialog for bulk selection
+    if (showPlaylistSelectorForSelection && selectedTracks.isNotEmpty()) {
+        Dialog(onDismissRequest = { showPlaylistSelectorForSelection = false }) {
+            AeroClassyDialogLayout(title = "Añadir Selección a Lista") {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "¿A qué lista quieres añadir las ${selectedTracks.size} canciones seleccionadas?",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    if (playlists.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x1F001D3A), RoundedCornerShape(2.dp))
+                                .padding(14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("No tienes listas guardadas.", color = Color.LightGray, fontSize = 11.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        showPlaylistSelectorForSelection = false
+                                        showCreatePlaylistDialog = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007ECC))
+                                ) {
+                                    Text("Crear Lista Ahora", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .border(1.dp, Color(0x3BFFFFFF), RoundedCornerShape(2.dp))
+                                .background(Color(0x20000000)),
+                            contentPadding = PaddingValues(4.dp)
+                        ) {
+                            items(playlists) { playlist ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .clickable {
+                                            selectedTracks.forEach { track ->
+                                                viewModel.addTrackToPlaylist(track, playlist)
+                                            }
+                                            Toast.makeText(context, "Canciones añadidas a ${playlist.name}", Toast.LENGTH_SHORT).show()
+                                            selectedTracks.clear()
+                                            showPlaylistSelectorForSelection = false
+                                        }
+                                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, tint = Color(0xFF6EDDFF), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(text = playlist.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showPlaylistSelectorForSelection = false }) {
+                            Text("Cerrar", color = Color(0xFF9FC2D8), fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -449,6 +587,7 @@ fun RowScope.AeroTabButton(
 /**
  * TAB 0: Library View with Search, list view and interactive song records
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryView(
     filteredTracks: List<Track>,
@@ -458,23 +597,30 @@ fun LibraryView(
     onSearchChange: (String) -> Unit,
     onTrackSelect: (Track) -> Unit,
     onFavoriteToggle: (Track) -> Unit,
-    onAddPlaylist: (Track) -> Unit
+    onAddPlaylist: (Track) -> Unit,
+    selectedTracks: List<Track>,
+    onToggleSelect: (Track) -> Unit,
+    onClearSelection: () -> Unit,
+    onBulkAddPlaylist: () -> Unit,
+    onBulkFavoriteToggle: () -> Unit,
+    onBulkDelete: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Transparent Aero Search box
+        // Transparent compact Aero Search box (More compact as requested)
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp)
+                .padding(bottom = 6.dp)
+                .height(48.dp) // more compact height
                 .testTag("search_input"),
-            placeholder = { Text("Buscar canción, artista, álbum...", color = Color(0x8DDFEFFF)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF88C9FF)) },
+            placeholder = { Text("Buscar canción, artista...", color = Color(0x8DDFEFFF), fontSize = 12.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF88C9FF), modifier = Modifier.size(16.dp)) },
             trailingIcon = if (searchQuery.isNotEmpty()) {
                 {
-                    IconButton(onClick = { onSearchChange("") }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Limpiar", tint = Color.LightGray)
+                    IconButton(onClick = { onSearchChange("") }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Clear, contentDescription = "Limpiar", tint = Color.LightGray, modifier = Modifier.size(16.dp))
                     }
                 }
             } else null,
@@ -486,11 +632,60 @@ fun LibraryView(
                 focusedIndicatorColor = Color(0xFF33AAFF),
                 unfocusedIndicatorColor = Color(0x3BFFFFFF)
             ),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(2.dp), // rectangular as requested
+            singleLine = true
         )
 
-        // Glass scrollable library panel
-        AeroGlassCard(modifier = Modifier.weight(1f)) {
+        // Bulk Selection Ribbon bar
+        if (selectedTracks.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+                    .background(Color(0xE5031A33), RoundedCornerShape(2.dp))
+                    .border(1.dp, Color(0x705ED8FF), RoundedCornerShape(2.dp))
+                    .padding(vertical = 4.dp, horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClearSelection, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancelar selección", tint = Color.LightGray, modifier = Modifier.size(14.dp))
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "${selectedTracks.size} seleccionada(s)",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Favorite bulk toggler
+                    IconButton(onClick = onBulkFavoriteToggle, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Favorite, contentDescription = "Favoritos", tint = Color(0xFFFF2E63), modifier = Modifier.size(16.dp))
+                    }
+                    // Playlist bulk adder
+                    IconButton(onClick = onBulkAddPlaylist, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Añadir a lista", tint = Color(0xFF6EDDFF), modifier = Modifier.size(18.dp))
+                    }
+                    // Delete bulk action
+                    IconButton(onClick = onBulkDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
+        // Glass scrollable library panel - rectangularized
+        AeroGlassCard(
+            modifier = Modifier.weight(1f),
+            cornerRadius = 2.dp // Vista/Win7 rectangular styling
+        ) {
             if (filteredTracks.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -499,28 +694,28 @@ fun LibraryView(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color(0xFF5ED0FF))
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(44.dp), tint = Color(0xFF5ED0FF))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "No se encontraron canciones.",
                         color = Color(0xFFCBE3FB),
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Copia tus archivos MP3 a la memoria interna de tu dispositivo y haz clic en el botón de actualización arriba.",
                         color = Color(0xAAFFFFFF),
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    contentPadding = PaddingValues(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp) // compact arrangement spacing as requested!
                 ) {
                     // Check if they are synthetic songs to notify
                     val syntheticCount = filteredTracks.count { it.isSynthetic }
@@ -529,16 +724,16 @@ fun LibraryView(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(4.dp)
+                                    .background(Color(0x1F3F51B5), RoundedCornerShape(2.dp))
+                                    .border(1.dp, Color(0x3F88AADD), RoundedCornerShape(2.dp))
                                     .padding(6.dp)
-                                    .background(Color(0x1F3F51B5), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color(0x3F88AADD), RoundedCornerShape(8.dp))
-                                    .padding(8.dp)
                             ) {
                                 Text(
                                     text = "💡 Reproduciendo chismes de muestra. Para tus propios MP3s locales, copia archivos a carpetas del dispositivo y pulsa Sincronizar en la esquina superior.",
                                     color = Color(0xFFBAE5FF),
-                                    fontSize = 11.sp,
-                                    lineHeight = 15.sp
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp
                                 )
                             }
                         }
@@ -546,47 +741,67 @@ fun LibraryView(
 
                     items(filteredTracks, key = { it.id }) { track ->
                         val isPlayingThis = (currentTrack?.id == track.id)
+                        val isSelected = selectedTracks.contains(track)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(2.dp)) // rectangular styling
                                 .background(
-                                    if (isPlayingThis) Color(0x4F00C8FF) else Color(0x08FFFFFF)
+                                    if (isSelected) Color(0x7F0099FF)
+                                    else if (isPlayingThis) Color(0x3B00C8FF)
+                                    else Color(0x06FFFFFF)
                                 )
                                 .border(
                                     1.dp,
-                                    if (isPlayingThis) Color(0x805ED8FF) else Color.Transparent,
-                                    RoundedCornerShape(10.dp)
+                                    if (isSelected) Color(0xFF5ED8FF)
+                                    else if (isPlayingThis) Color(0x605ED8FF)
+                                    else Color.Transparent,
+                                    RoundedCornerShape(2.dp)
                                 )
-                                .clickable { onTrackSelect(track) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .combinedClickable(
+                                    onLongClick = {
+                                        onToggleSelect(track)
+                                    },
+                                    onClick = {
+                                        if (selectedTracks.isNotEmpty()) {
+                                            onToggleSelect(track)
+                                        } else {
+                                            onTrackSelect(track)
+                                        }
+                                    }
+                                )
+                                .padding(horizontal = 8.dp, vertical = 6.dp), // More compact padding to show more items
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Left music play indicator icon or badge
+                            // Left indicator icon/badge showing checkboxes when selecting
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(28.dp) // compact size
                                     .background(
-                                        if (isPlayingThis) Color(0x7000FFCC) else Color(0x20FFFFFF),
+                                        if (isSelected) Color(0xFF00B2FF)
+                                        else if (isPlayingThis) Color(0x6000FFCC)
+                                        else Color(0x15FFFFFF),
                                         CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                    imageVector = if (isSelected) Icons.Default.Check
+                                                  else if (isPlayingThis && isPlaying) Icons.Filled.VolumeUp
+                                                  else Icons.Filled.MusicNote,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (isPlayingThis) Color.White else Color(0xFF7ED2FF)
+                                    modifier = Modifier.size(13.dp),
+                                    tint = Color.White
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
 
                             // Middle title and subtitle descriptions
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = track.title,
                                     color = Color.White,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp, // slightly smaller text for compactness
                                     fontWeight = if (isPlayingThis) FontWeight.Bold else FontWeight.Normal,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -594,46 +809,48 @@ fun LibraryView(
                                 Text(
                                     text = "${track.artist} • ${track.album}",
                                     color = Color(0xFFA1CADF),
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
 
-                            // Right Action controls: Favorite and Playlist managers
+                            // Right Action controls: Compactly arranged
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 // Duration text badge
                                 Text(
                                     text = track.durationText,
                                     color = Color(0xFF7ED2FF),
                                     fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 4.dp)
                                 )
 
-                                // Favorite toggler
-                                IconButton(
-                                    onClick = { onFavoriteToggle(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (track.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                                        contentDescription = "Favorito",
-                                        tint = if (track.isFavorite) Color(0xFFFF2E63) else Color(0x90FFFFFF),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                if (selectedTracks.isEmpty()) {
+                                    // Favorite toggler
+                                    IconButton(
+                                        onClick = { onFavoriteToggle(track) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (track.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                            contentDescription = "Favorito",
+                                            tint = if (track.isFavorite) Color(0xFFFF2E63) else Color(0x90FFFFFF),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
 
-                                // Playlist context adder
-                                IconButton(
-                                    onClick = { onAddPlaylist(track) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlaylistAdd,
-                                        contentDescription = "Añadir a lista",
-                                        tint = Color(0xCCFFFFFF),
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    // Playlist context adder
+                                    IconButton(
+                                        onClick = { onAddPlaylist(track) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlaylistAdd,
+                                            contentDescription = "Añadir a lista",
+                                            tint = Color(0xCCFFFFFF),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -871,10 +1088,11 @@ fun PlaylistView(
 }
 
 /**
- * TAB 2: Now Playing central panel view which contains spinning CD disc and audio visualizer mechanics
+ * TAB 2: Now Playing central panel view which contains spinning CD disc, queue editor and lyrics center
  */
 @Composable
 fun NowPlayingView(
+    viewModel: AeroViewModel,
     currentTrack: Track?,
     isPlaying: Boolean,
     currentPosition: Long,
@@ -886,11 +1104,13 @@ fun NowPlayingView(
     onNext: () -> Unit,
     onPrevious: () -> Unit
 ) {
+    var activeSubTab by remember { mutableStateOf(0) } // 0 = Visualizador, 1 = Cola, 2 = Letras
+
     AeroGlassCard(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(12.dp), // slightly more compact padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (currentTrack == null) {
@@ -912,6 +1132,7 @@ fun NowPlayingView(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Selecciona una canción de la biblioteca para empezar la reproducción con estilo.",
                         color = Color(0xBACADFEE),
@@ -922,79 +1143,364 @@ fun NowPlayingView(
                     )
                 }
             } else {
-                // Large Spinning CD visualizer panel
-                Spacer(modifier = Modifier.weight(1f))
-                AlbumArtView(track = currentTrack, isPlaying = isPlaying)
-                Spacer(modifier = Modifier.weight(0.8f))
-
-                // Track Title info
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = currentTrack.title,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${currentTrack.artist} • ${currentTrack.album}",
-                        color = Color(0xFFBAE5FF),
-                        fontSize = 13.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(0.8f))
-
-                // Procedural Bars Equalizer visualizer
-                VisualizerCanvas(isPlaying = isPlaying)
-
-                Spacer(modifier = Modifier.weight(0.8f))
-
-                // Miniature Glass playback statistics (playing info bits)
+                // Shiny Aero tab switcher for the Now Playing subsystems
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0x1F000000), RoundedCornerShape(10.dp))
-                        .padding(8.dp),
+                        .padding(bottom = 12.dp)
+                        .background(Color(0x1F000000), RoundedCornerShape(4.dp))
+                        .padding(2.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("MUESTRA", color = Color(0x8DDFEFFF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = if (currentTrack.isSynthetic) "PCM WAV" else "LOCAL MP3",
-                            color = Color(0xFF4CB8FF),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("CANALES", color = Color(0x8DDFEFFF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = if (currentTrack.isSynthetic) "MONO" else "ESTÉREO",
-                            color = Color(0xFF4CB8FF),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("FRECUENCIA", color = Color(0x8DDFEFFF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = if (currentTrack.isSynthetic) "22,050 KHZ" else "44,100 KHZ",
-                            color = Color(0xFF4CB8FF),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    val subTabTitles = listOf("Reproductor", "Cola de Temas", "Letras")
+                    subTabTitles.forEachIndexed { sIdx, sTitle ->
+                        val isSubSelected = (activeSubTab == sIdx)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(
+                                    if (isSubSelected) Color(0x3B0088DD) else Color.Transparent
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSubSelected) Color(0x805ED8FF) else Color.Transparent,
+                                    RoundedCornerShape(3.dp)
+                                )
+                                .clickable { activeSubTab = sIdx }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = sTitle,
+                                color = if (isSubSelected) Color.White else Color(0xBACADFEE),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.weight(1f))
+
+                when (activeSubTab) {
+                    0 -> {
+                        // SUB-TAB 0: Traditional CD Spinner & Bars Equalizer
+                        Spacer(modifier = Modifier.weight(1f))
+                        AlbumArtView(track = currentTrack, isPlaying = isPlaying)
+                        Spacer(modifier = Modifier.weight(0.8f))
+
+                        // Track Title info
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = currentTrack.title,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${currentTrack.artist} • ${currentTrack.album}",
+                                color = Color(0xFFBAE5FF),
+                                fontSize = 12.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.weight(0.8f))
+
+                        // Procedural Bars Equalizer visualizer
+                        VisualizerCanvas(isPlaying = isPlaying)
+
+                        Spacer(modifier = Modifier.weight(0.8f))
+
+                        // Miniature Glass playback statistics (playing info bits)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x1F000000), RoundedCornerShape(2.dp))
+                                .padding(6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("MUESTRA", color = Color(0x8DDFEFFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (currentTrack.isSynthetic) "PCM WAV" else "LOCAL MP3",
+                                    color = Color(0xFF4CB8FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("CANALES", color = Color(0x8DDFEFFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (currentTrack.isSynthetic) "MONO" else "ESTÉREO",
+                                    color = Color(0xFF4CB8FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("FRECUENCIA", color = Color(0x8DDFEFFF), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (currentTrack.isSynthetic) "22,050 KHZ" else "44,100 KHZ",
+                                    color = Color(0xFF4CB8FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    1 -> {
+                        // SUB-TAB 1: Interactive Queue Editor
+                        val queuePlaylist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
+
+                        Text(
+                            text = "Cola de Reproducción (${queuePlaylist.size} temas)",
+                            color = Color(0xFF8AD4FF),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                                .background(Color(0x10000000)),
+                            contentPadding = PaddingValues(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (queuePlaylist.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(150.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("No hay canciones en la cola.", color = Color.Gray, fontSize = 12.sp)
+                                    }
+                                }
+                            } else {
+                                itemsIndexed(queuePlaylist) { idx, track ->
+                                    val isPlayingThis = (currentTrack.id == track.id)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                if (isPlayingThis) Color(0x3B00C8FF) else Color(0x06FFFFFF),
+                                                RoundedCornerShape(2.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isPlayingThis) Color(0x6000FFCC) else Color.Transparent,
+                                                RoundedCornerShape(2.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = if (isPlayingThis) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                                contentDescription = null,
+                                                tint = if (isPlayingThis) Color(0xFF00FFCC) else Color(0xFF5ECEFF),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = track.title,
+                                                    color = Color.White,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isPlayingThis) FontWeight.Bold else FontWeight.Normal,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = track.artist,
+                                                    color = Color.LightGray,
+                                                    fontSize = 10.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            // Move Up
+                                            if (idx > 0) {
+                                                IconButton(
+                                                    onClick = { viewModel.moveQueueTrack(idx, idx - 1) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(Icons.Default.ArrowUpward, contentDescription = "Subir", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                }
+                                            } else {
+                                                Spacer(modifier = Modifier.size(24.dp))
+                                            }
+
+                                            // Move Down
+                                            if (idx < queuePlaylist.size - 1) {
+                                                IconButton(
+                                                    onClick = { viewModel.moveQueueTrack(idx, idx + 1) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                }
+                                            } else {
+                                                Spacer(modifier = Modifier.size(24.dp))
+                                            }
+
+                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                            // Remove
+                                            IconButton(
+                                                onClick = { viewModel.removeTrackFromQueue(idx) },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = "Quitar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        // SUB-TAB 2: Manual Lyrics Reader / Custom Editor Center
+                        var showEditLyricsDialog by remember { mutableStateOf(false) }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Letras de la Pista",
+                                color = Color(0xFF8AD4FF),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Button(
+                                onClick = { showEditLyricsDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007ECC)),
+                                modifier = Modifier.height(28.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (currentTrack.lyrics.isNullOrBlank()) "Escribir" else "Editar",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                                .background(Color(0x15000000))
+                                .padding(12.dp)
+                        ) {
+                            if (currentTrack.lyrics.isNullOrBlank()) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(Icons.Default.Description, contentDescription = null, tint = Color(0x3BFFFFFF), modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text("No hay letras guardadas.", color = Color.LightGray, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Pulsa en \"Escribir\" para guardar letras de esta canción.", color = Color.Gray, fontSize = 10.sp)
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(
+                                        text = currentTrack.lyrics ?: "",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        lineHeight = 20.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+
+                        if (showEditLyricsDialog) {
+                            var lyricsInput by remember { mutableStateOf(currentTrack.lyrics ?: "") }
+                            Dialog(onDismissRequest = { showEditLyricsDialog = false }) {
+                                AeroClassyDialogLayout(title = "Escribir Letras") {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "Escribe o pega las letras de \"${currentTrack.title}\":",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+
+                                        OutlinedTextField(
+                                            value = lyricsInput,
+                                            onValueChange = { lyricsInput = it },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(200.dp),
+                                            placeholder = { Text("Escribe las letras aquí...", color = Color.Gray, fontSize = 11.sp) },
+                                            colors = TextFieldDefaults.colors(
+                                                focusedContainerColor = Color(0x301A2B3C),
+                                                unfocusedContainerColor = Color(0x15000000),
+                                                focusedTextColor = Color.White,
+                                                unfocusedTextColor = Color.White,
+                                                focusedIndicatorColor = Color(0xFF33AAFF)
+                                            ),
+                                            maxLines = 100
+                                        )
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                            TextButton(onClick = { showEditLyricsDialog = false }) {
+                                                Text("Cancelar", color = Color(0xFF9FC2D8), fontSize = 12.sp)
+                                            }
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Button(
+                                                onClick = {
+                                                    viewModel.saveLyrics(currentTrack, lyricsInput)
+                                                    showEditLyricsDialog = false
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD))
+                                            ) {
+                                                Text("Guardar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1399,6 +1905,360 @@ fun AeroClassyDialogLayout(
 
             Spacer(modifier = Modifier.height(4.dp))
             content()
+        }
+    }
+}
+
+/**
+ * DIALOG 3: Settings Panel allows configuring Folders to Scan and Folders to Ignore
+ */
+@Composable
+fun SettingsDialog(
+    viewModel: AeroViewModel,
+    onDismiss: () -> Unit
+) {
+    val scannedFolders by viewModel.scannedFolders.collectAsStateWithLifecycle()
+    val ignoredFolders by viewModel.ignoredFolders.collectAsStateWithLifecycle()
+
+    var newScanPath by remember { mutableStateOf("") }
+    var newIgnorePath by remember { mutableStateOf("") }
+
+    var activeSubTab by remember { mutableStateOf(0) } // 0 = Escanear, 1 = Ignorar
+
+    Dialog(onDismissRequest = onDismiss) {
+        AeroClassyDialogLayout(title = "Configuración de Biblioteca") {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Settings subtabs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .background(Color(0x1A000000), RoundedCornerShape(2.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    val configTabs = listOf("Escanear", "Ignorar")
+                    configTabs.forEachIndexed { idx, title ->
+                        val isSel = (activeSubTab == idx)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if (isSel) Color(0x3B0088DD) else Color.Transparent)
+                                .clickable { activeSubTab = idx }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (isSel) Color.White else Color(0xBACADFEE),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+
+                if (activeSubTab == 0) {
+                    // TAB: Scanned paths
+                    Text(
+                        text = "Carpetas a escanear",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Si está vacío, busca en todo el almacenamiento. Si agregas carpetas, solo escaneará aquellas seleccionadas.",
+                        color = Color(0xFFA1CADF),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newScanPath,
+                            onValueChange = { newScanPath = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp),
+                            placeholder = { Text("Ej: Music/AeroPlayer", color = Color.Gray, fontSize = 11.sp) },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x301A2B3C),
+                                unfocusedContainerColor = Color(0x10000000),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color(0xFF33AAFF)
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Button(
+                            onClick = {
+                                if (newScanPath.isNotBlank()) {
+                                    viewModel.addScannedFolder(newScanPath)
+                                    newScanPath = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            Text("Añadir", fontSize = 11.sp, color = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                            .background(Color(0x15000000)),
+                        contentPadding = PaddingValues(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (scannedFolders.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
+                                }
+                            }
+                        } else {
+                            items(scannedFolders) { path ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = path, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { viewModel.removeScannedFolder(path) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // TAB: Ignored paths
+                    Text(
+                        text = "Carpetas a ignorar",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Los archivos de estas carpetas e hilos de audio internos de otras aplicaciones se omitirán completamente de la biblioteca.",
+                        color = Color(0xFFA1CADF),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newIgnorePath,
+                            onValueChange = { newIgnorePath = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp),
+                            placeholder = { Text("Ej: Telegram/Telegram Audio", color = Color.Gray, fontSize = 11.sp) },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x301A2B3C),
+                                unfocusedContainerColor = Color(0x10000000),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color(0xFF33AAFF)
+                            ),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Button(
+                            onClick = {
+                                if (newIgnorePath.isNotBlank()) {
+                                    viewModel.addIgnoredFolder(newIgnorePath)
+                                    newIgnorePath = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            Text("Añadir", fontSize = 11.sp, color = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                            .background(Color(0x15000000)),
+                        contentPadding = PaddingValues(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (ignoredFolders.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Ninguna carpeta ignorada.", color = Color.LightGray, fontSize = 11.sp)
+                                }
+                            }
+                        } else {
+                            items(ignoredFolders) { path ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = path, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    IconButton(
+                                        onClick = { viewModel.removeIgnoredFolder(path) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD))
+                    ) {
+                        Text("Aceptar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * DIALOG 4: Confirmation dialog for deleting or removing multiple tracks
+ */
+@Composable
+fun BulkDeleteConfirmDialog(
+    count: Int,
+    onConfirm: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var deletePhysicalFiles by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        AeroClassyDialogLayout(title = "Eliminar Canciones") {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "¿Seguro que deseas eliminar estas $count canciones de la biblioteca?",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Checkbox to also delete files physically
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { deletePhysicalFiles = !deletePhysicalFiles }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = deletePhysicalFiles,
+                        onCheckedChange = { deletePhysicalFiles = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Color(0xFF00FFCC),
+                            uncheckedColor = Color.White,
+                            checkmarkColor = Color(0xFF041B32)
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Eliminar archivo del dispositivo de forma permanente",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (deletePhysicalFiles) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color(0x3BFF5252), RoundedCornerShape(2.dp))
+                            .background(Color(0x22FF5252))
+                            .padding(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = "Peligro", tint = Color(0xFFFF5252), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "⚠️ ADVERTENCIA: Esta acción es irreversible y borrará el archivo de tu teléfono.",
+                                color = Color(0xFFFF8B8B),
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancelar", color = Color(0xFFBACADFEE), fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Button(
+                        onClick = { onConfirm(deletePhysicalFiles) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252))
+                    ) {
+                        Text("Eliminar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

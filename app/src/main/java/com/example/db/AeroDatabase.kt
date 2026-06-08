@@ -54,9 +54,12 @@ interface MusicDao {
         ORDER BY pt.id ASC
     """)
     fun getPlaylistTracks(playlistId: Int): Flow<List<Track>>
+
+    @Query("DELETE FROM tracks WHERE id IN (:ids)")
+    suspend fun deleteTracksById(ids: List<Int>)
 }
 
-@Database(entities = [Track::class, Playlist::class, PlaylistTrack::class], version = 1, exportSchema = false)
+@Database(entities = [Track::class, Playlist::class, PlaylistTrack::class], version = 2, exportSchema = false)
 abstract class AeroDatabase : RoomDatabase() {
     abstract fun musicDao(): MusicDao
 
