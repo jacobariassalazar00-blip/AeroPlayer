@@ -179,12 +179,7 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
             .drawBehind {
                 // Aero-style Aurora fluid background
                 val auroraBrush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF002244), // Deep Professional Midnight Blue
-                        Color(0xFF003C71), // Professional Royal Dark Blue
-                        Color(0xFF005DA3), // Professional Middle Blue
-                        Color(0xFF0078D7)  // Professional Radiant Blue
-                    ),
+                    colors = auroraColors,
                     start = Offset(0f, 0f),
                     end = Offset(size.width, size.height)
                 )
@@ -192,17 +187,17 @@ fun AeroPlayerApp(viewModel: AeroViewModel) {
 
                 // Render vector water bubbles (Frutiger Aero signature!)
                 drawCircle(
-                    color = Color(0x12FFFFFF),
+                    color = bubbleColor.copy(alpha = (bubbleColor.alpha * 1.2f).coerceAtMost(1f)),
                     radius = size.width * 0.28f,
                     center = Offset(size.width * 0.15f, size.height * 0.25f)
                 )
                 drawCircle(
-                    color = Color(0x0A00FFFF),
+                    color = bubbleColor,
                     radius = size.width * 0.18f,
                     center = Offset(size.width * 0.85f, size.height * 0.45f)
                 )
                 drawCircle(
-                    color = Color(0x06FFFFFF),
+                    color = bubbleColor.copy(alpha = (bubbleColor.alpha * 0.5f).coerceAtMost(1f)),
                     radius = size.width * 0.4f,
                     center = Offset(size.width * 0.5f, size.height * 0.8f)
                 )
@@ -2441,23 +2436,54 @@ fun PlaylistSelectorDialog(
 @Composable
 fun AeroClassyDialogLayout(
     title: String,
+    themeId: String = "azul",
     content: @Composable () -> Unit
 ) {
+    val bgColors = when (themeId) {
+        "claro" -> listOf(Color(0xDCE4F0FB), Color(0xF2BAD6F2))
+        "verde" -> listOf(Color(0xE0022A16), Color(0xF2011A0E))
+        "gris_oscuro" -> listOf(Color(0xE016181C), Color(0xF224272F))
+        else -> listOf(Color(0xE0051B33), Color(0xF0020E1D))
+    }
+
+    val borderGlow = when (themeId) {
+        "claro" -> Color(0x90005DA3)
+        "verde" -> Color(0x8000FF7F)
+        "gris_oscuro" -> Color(0x60C0D5E8)
+        else -> Color(0x605ED8FF)
+    }
+
+    val iconTint = when (themeId) {
+        "claro" -> Color(0xFF005DA3)
+        "verde" -> Color(0xFF00FF7F)
+        "gris_oscuro" -> Color(0xFFC0D5E8)
+        else -> Color(0xFF00FFCC)
+    }
+
+    val titleColor = when (themeId) {
+        "claro" -> Color(0xFF003C71)
+        "verde" -> Color(0xFF05B26F)
+        "gris_oscuro" -> Color(0xFFE0E5EC)
+        else -> Color(0xFF8AD4FF)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(16.dp, RoundedCornerShape(16.dp))
             .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xE0051B33), Color(0xF0020E1D))
-                ),
+                brush = Brush.verticalGradient(colors = bgColors),
                 shape = RoundedCornerShape(16.dp)
             )
-            .border(2.dp, Color(0x605ED8FF), RoundedCornerShape(16.dp))
+            .border(2.dp, borderGlow, RoundedCornerShape(16.dp))
             .drawBehind {
                 // Gloss effect on top portion with rounded corners
                 val topBrush = Brush.verticalGradient(
-                    colors = listOf(Color(0x28FFFFFF), Color.Transparent),
+                    colors = if (themeId == "claro") {
+                        listOf(Color(0x38FFFFFF), Color.Transparent)
+                    } else {
+                        listOf(Color(0x28FFFFFF), Color.Transparent)
+                    },
                     startY = 0f,
                     endY = size.height * 0.35f
                 )
@@ -2478,16 +2504,16 @@ fun AeroClassyDialogLayout(
                     .padding(bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF00FFCC), modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Settings, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = title, color = Color(0xFF8AD4FF), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(text = title, color = titleColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(Color(0x3BFFFFFF))
+                    .background(if (themeId == "claro") Color(0x2B000000) else Color(0x3BFFFFFF))
                     .padding(bottom = 12.dp)
             )
 
@@ -2497,78 +2523,190 @@ fun AeroClassyDialogLayout(
     }
 }
 
-/**
- * DIALOG 3: Settings Panel allows configuring Folders to Scan and Folders to Ignore
- */
+fun getRelativePathFromUri(context: android.content.Context, uri: android.net.Uri): String {
+    return try {
+        val docId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+        val split = docId.split(":")
+        if (split.size > 1) {
+            val relative = split[1]
+            // URL decode to make it look clean and readable (e.g., %20 to spaces)
+            android.net.Uri.decode(relative)
+        } else {
+            android.net.Uri.decode(docId)
+        }
+    } catch (e: Exception) {
+        // Fallback: decode last path segment
+        uri.path?.substringAfterLast(":")?.let { android.net.Uri.decode(it) } ?: ""
+    }
+}
+
 @Composable
-fun SettingsDialog(
+fun SettingsContent(
     viewModel: AeroViewModel,
-    onDismiss: () -> Unit
+    isEmbeddedInDialog: Boolean = false,
+    onDismiss: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val currentTheme by viewModel.currentTheme.collectAsStateWithLifecycle()
     val scannedFolders by viewModel.scannedFolders.collectAsStateWithLifecycle()
     val ignoredFolders by viewModel.ignoredFolders.collectAsStateWithLifecycle()
+    val eqPreset by viewModel.eqPreset.collectAsStateWithLifecycle()
+    val sleepTimer by viewModel.sleepTimer.collectAsStateWithLifecycle()
 
     var newScanPath by remember { mutableStateOf("") }
     var newIgnorePath by remember { mutableStateOf("") }
+    var activeSubTab by remember { mutableStateOf(0) } // 0 = Biblioteca, 1 = Apariencia, 2 = Reproducción
+    var showResetConfirm by remember { mutableStateOf(false) }
 
-    var activeSubTab by remember { mutableStateOf(0) } // 0 = Escanear, 1 = Ignorar
+    // Dynamic accent color based on theme
+    val accentColor = when (currentTheme) {
+        "claro" -> Color(0xFF005DA3)
+        "verde" -> Color(0xFF00FF7F)
+        "gris_oscuro" -> Color(0xFFC0D5E8)
+        else -> Color(0xFF5ED8FF)
+    }
 
-    Dialog(onDismissRequest = onDismiss) {
-        AeroClassyDialogLayout(title = "Configuración de Biblioteca") {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Settings subtabs
-                Row(
+    // Storage Access Framework Picker Launcher for System Folders
+    var pickerTargetIsIgnore by remember { mutableStateOf(false) }
+    val folderLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            val relativePath = getRelativePathFromUri(context, it)
+            if (relativePath.isNotBlank()) {
+                if (pickerTargetIsIgnore) {
+                    viewModel.addIgnoredFolder(relativePath)
+                    Toast.makeText(context, "Filtro añadido: $relativePath", Toast.LENGTH_SHORT).show()
+                } else {
+                    viewModel.addScannedFolder(relativePath)
+                    Toast.makeText(context, "Carpeta añadida: $relativePath", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(if (isEmbeddedInDialog) 0.dp else 2.dp)
+    ) {
+        // Upper categories selector tabs
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .background(Color(0x1A000000), RoundedCornerShape(4.dp))
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            val sections = listOf(
+                Triple(0, "Biblioteca", Icons.Default.LibraryMusic),
+                Triple(1, "Apariencia", Icons.Default.Palette),
+                Triple(2, "Reproducción", Icons.Default.Tune)
+            )
+            sections.forEach { (idx, title, icon) ->
+                val isSel = (activeSubTab == idx)
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                        .background(Color(0x1A000000), RoundedCornerShape(2.dp))
-                        .padding(2.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                        .weight(1f)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (isSel) accentColor.copy(alpha = 0.35f) else Color.Transparent)
+                        .border(
+                            1.dp,
+                            if (isSel) accentColor.copy(alpha = 0.8f) else Color.Transparent,
+                            RoundedCornerShape(3.dp)
+                        )
+                        .clickable { activeSubTab = idx }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    val configTabs = listOf("Escanear", "Ignorar")
-                    configTabs.forEachIndexed { idx, title ->
-                        val isSel = (activeSubTab == idx)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(if (isSel) Color(0x3B0088DD) else Color.Transparent)
-                                .clickable { activeSubTab = idx }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = title,
-                                color = if (isSel) Color.White else Color(0xBACADFEE),
-                                fontSize = 12.sp,
-                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isSel) accentColor else Color(0xBACADFEE),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = title,
+                            color = if (isSel) Color.White else Color(0xBACADFEE),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                 }
+            }
+        }
 
-                if (activeSubTab == 0) {
-                    // TAB: Scanned paths
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // SECTION CONTENT
+        when (activeSubTab) {
+            0 -> {
+                // BIBLIOTECA SECTION
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Carpetas a escanear",
+                        text = "Gestión de Biblioteca",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Si está vacío, busca en todo el almacenamiento. Si agregas carpetas, solo escaneará aquellas seleccionadas.",
+                        text = "Configura el alcance y filtros de escaneo de tus archivos multimedia.",
                         color = Color(0xFFA1CADF),
                         fontSize = 10.sp,
-                        lineHeight = 14.sp,
+                        lineHeight = 13.sp,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
+                    // Scanned folders
+                    Text(
+                        text = "Carpetas a Escanear",
+                        color = accentColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // System folder picker button
+                    Button(
+                        onClick = {
+                            pickerTargetIsIgnore = false
+                            try {
+                                folderLauncher.launch(null)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No se pudo abrir el selector del sistema. Usa la entrada manual.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(alpha = 0.25f)),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.8f)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.fillMaxWidth().height(38.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = accentColor, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Examinar Carpeta del Dispositivo...", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "O ingresa una ruta manual de almacenamiento:",
+                        color = Color(0xAACADFEE),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+
+                    // Manual Text Field
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -2578,16 +2716,17 @@ fun SettingsDialog(
                             onValueChange = { newScanPath = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
-                            placeholder = { Text("Ej: Music/AeroPlayer", color = Color.Gray, fontSize = 11.sp) },
+                                .height(44.dp),
+                            placeholder = { Text("Ej: Music/Canciones, Download", color = Color.Gray, fontSize = 10.sp) },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color(0x301A2B3C),
                                 unfocusedContainerColor = Color(0x10000000),
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White,
-                                focusedIndicatorColor = Color(0xFF33AAFF)
+                                focusedIndicatorColor = accentColor
                             ),
-                            singleLine = true
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Button(
@@ -2597,20 +2736,22 @@ fun SettingsDialog(
                                     newScanPath = ""
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
-                            modifier = Modifier.height(38.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                            modifier = Modifier.height(38.dp),
+                            shape = RoundedCornerShape(4.dp)
                         ) {
-                            Text("Añadir", fontSize = 11.sp, color = Color.White)
+                            Text("Añadir", fontSize = 11.sp, color = if (currentTheme == "claro") Color.Black else Color.White)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
+                    // Scanned directories list
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 140.dp)
-                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                            .heightIn(max = 100.dp)
+                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(4.dp))
                             .background(Color(0x15000000))
                             .padding(4.dp)
                             .verticalScroll(rememberScrollState()),
@@ -2620,10 +2761,10 @@ fun SettingsDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
+                                Text("Escaneando todo el almacenamiento (por defecto)", color = Color.LightGray, fontSize = 10.sp)
                             }
                         } else {
                             scannedFolders.forEach { path ->
@@ -2631,38 +2772,63 @@ fun SettingsDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        .padding(horizontal = 6.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(text = path, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
                                     IconButton(
                                         onClick = { viewModel.removeScannedFolder(path) },
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(24.dp)
                                     ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(12.dp))
                                     }
                                 }
                             }
                         }
                     }
-                } else {
-                    // TAB: Ignored paths
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Ignored Folders
                     Text(
-                        text = "Carpetas a ignorar",
-                        color = Color.White,
-                        fontSize = 13.sp,
+                        text = "Excluir/Ignorar Carpetas",
+                        color = accentColor,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "Los archivos de estas carpetas e hilos de audio internos de otras aplicaciones se omitirán completamente de la biblioteca.",
-                        color = Color(0xFFA1CADF),
-                        fontSize = 10.sp,
-                        lineHeight = 14.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Button(
+                        onClick = {
+                            pickerTargetIsIgnore = true
+                            try {
+                                folderLauncher.launch(null)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No se pudo abrir el selector del sistema. Usa la entrada manual.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor.copy(alpha = 0.25f)),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.8f)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.fillMaxWidth().height(38.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = accentColor, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Examinar Carpeta para Excluir...", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "O ingresa una palabra de filtro manual:",
+                        color = Color(0xAACADFEE),
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -2673,16 +2839,17 @@ fun SettingsDialog(
                             onValueChange = { newIgnorePath = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(46.dp),
-                            placeholder = { Text("Ej: Telegram/Telegram Audio", color = Color.Gray, fontSize = 11.sp) },
+                                .height(44.dp),
+                            placeholder = { Text("Ej: WhatsApp/Media, PodCasts", color = Color.Gray, fontSize = 10.sp) },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color(0x301A2B3C),
                                 unfocusedContainerColor = Color(0x10000000),
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White,
-                                focusedIndicatorColor = Color(0xFF33AAFF)
+                                focusedIndicatorColor = accentColor
                             ),
-                            singleLine = true
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Button(
@@ -2692,20 +2859,21 @@ fun SettingsDialog(
                                     newIgnorePath = ""
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
-                            modifier = Modifier.height(38.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                            modifier = Modifier.height(38.dp),
+                            shape = RoundedCornerShape(4.dp)
                         ) {
-                            Text("Añadir", fontSize = 11.sp, color = Color.White)
+                            Text("Excluir", fontSize = 11.sp, color = if (currentTheme == "claro") Color.Black else Color.White)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 140.dp)
-                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
+                            .heightIn(max = 100.dp)
+                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(4.dp))
                             .background(Color(0x15000000))
                             .padding(4.dp)
                             .verticalScroll(rememberScrollState()),
@@ -2715,10 +2883,10 @@ fun SettingsDialog(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("Ninguna carpeta ignorada.", color = Color.LightGray, fontSize = 11.sp)
+                                Text("Ninguna carpeta excluida", color = Color.LightGray, fontSize = 10.sp)
                             }
                         } else {
                             ignoredFolders.forEach { path ->
@@ -2726,34 +2894,408 @@ fun SettingsDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        .padding(horizontal = 6.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(text = path, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
                                     IconButton(
                                         onClick = { viewModel.removeIgnoredFolder(path) },
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(24.dp)
                                     ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Safety Database Reset Option
+                    AeroGlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 6.dp,
+                        glowColor = Color(0x15FF5252)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Zona de Restablecimiento", color = Color(0xFFFF8888), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Limpia caché de pistas escaneadas y reinicia las carpetas originales.", color = Color.LightGray, fontSize = 9.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            if (!showResetConfirm) {
+                                Button(
+                                    onClick = { showResetConfirm = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x40FF5252)),
+                                    border = BorderStroke(1.dp, Color(0xFFFF5252)),
+                                    modifier = Modifier.fillMaxWidth().height(34.dp),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text("Reconfigurar Base de Datos...", fontSize = 11.sp, color = Color.White)
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { showResetConfirm = false },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text("Cancelar", fontSize = 10.sp, color = Color.White)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            viewModel.clearDatabaseCache()
+                                            showResetConfirm = false
+                                            Toast.makeText(context, "Base de datos restablecida correctamente", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252)),
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text("Confirmar", fontSize = 10.sp, color = Color.White)
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+            1 -> {
+                // APARIENCIA SECTION
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Temas de Apariencia Aero Glass",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Personaliza los colores, transparencias de la ventana y el resplandor de los botones.",
+                        color = Color(0xFFA1CADF),
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val themes = listOf(
+                        Triple("azul", "Azul Clásico", "El diseño clásico de Windows Media Player 11."),
+                        Triple("claro", "Claro (Laminado Ice)", "Frosty ártico brillante al estilo Aero de Vista."),
+                        Triple("verde", "Verde Evergreen", "Aero verde esmeralda con reflejos del Explorador."),
+                        Triple("gris_oscuro", "Gris Oscuro (Carbono)", "Acabado titanio y platino premium oscuro.")
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        themes.forEach { (themeId, name, desc) ->
+                            val isSelected = (currentTheme == themeId)
+                            val tileBorderColor = if (isSelected) accentColor else Color(0x25FFFFFF)
+
+                            val previewColors = when (themeId) {
+                                "claro" -> listOf(Color(0xFFE4F0FB), Color(0xFFBAD6F2))
+                                "verde" -> listOf(Color(0xFF022A16), Color(0xFF05B26F))
+                                "gris_oscuro" -> listOf(Color(0xFF16181C), Color(0xFF4B5162))
+                                else -> listOf(Color(0xFF002244), Color(0xFF0078D7))
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0x1F000000))
+                                    .border(
+                                        if (isSelected) 2.dp else 1.dp,
+                                        tileBorderColor,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable {
+                                        viewModel.setTheme(themeId)
+                                        Toast.makeText(context, "Tema cambiado a $name", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Mini Preview Gradient Circle
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(Brush.linearGradient(colors = previewColors))
+                                            .border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = if (themeId == "claro") Color.Black else Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = name,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = desc,
+                                            color = Color(0xFFCBE3FB),
+                                            fontSize = 9.sp,
+                                            lineHeight = 11.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            2 -> {
+                // REPRODUCCIÓN SECTION
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Preferencias de Audio y Reproducción",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Ajusta parámetros avanzados de reproducción para mejorar tu experiencia auditiva.",
+                        color = Color(0xFFA1CADF),
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Option 1: Equalizer presets
+                    Text(
+                        text = "Ecualizador Gráfico (Preajustes)",
+                        color = accentColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val eqOptions = listOf("Normal", "Rock", "Pop", "Jazz", "Clásica")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        eqOptions.forEach { option ->
+                            val isSel = (eqPreset == option)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (isSel) accentColor.copy(alpha = 0.35f) else Color(0x10FFFFFF))
+                                    .border(1.dp, if (isSel) accentColor else Color(0x1AFFFFFF), RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        viewModel.setEqPreset(option)
+                                        Toast.makeText(context, "Ecualizador cambiado a $option", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = option,
+                                    color = if (isSel) Color.White else Color.LightGray,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Option 2: Sleep Timer
+                    Text(
+                        text = "Temporizador de Apagado Autoprogramado",
+                        color = accentColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val timerOptions = listOf("Desactivado", "10 min", "20 min", "30 min", "60 min")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        timerOptions.take(3).forEach { option ->
+                            val isSel = (sleepTimer == option)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (isSel) accentColor.copy(alpha = 0.35f) else Color(0x10FFFFFF))
+                                    .border(1.dp, if (isSel) accentColor else Color(0x1AFFFFFF), RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        viewModel.setSleepTimer(option)
+                                        Toast.makeText(context, "Temporizador configurado: $option", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = option,
+                                    color = if (isSel) Color.White else Color.LightGray,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        timerOptions.drop(3).forEach { option ->
+                            val isSel = (sleepTimer == option)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (isSel) accentColor.copy(alpha = 0.35f) else Color(0x10FFFFFF))
+                                    .border(1.dp, if (isSel) accentColor else Color(0x1AFFFFFF), RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        viewModel.setSleepTimer(option)
+                                        Toast.makeText(context, "Temporizador configurado: $option", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = option,
+                                    color = if (isSel) Color.White else Color.LightGray,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Option 3: SRS WOW Effects
+                    var wowEffectsEnabled by remember { mutableStateOf(true) }
+                    var crossfadeSecs by remember { mutableFloatStateOf(2.0f) }
+
+                    AeroGlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        cornerRadius = 6.dp
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
+                                    Text("Efectos de Audio SRS WOW 3D", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Simulación envolvente analógica al estilo estéreo clásico de Windows Vista.", color = Color.LightGray, fontSize = 9.sp)
+                                }
+                                Switch(
+                                    checked = wowEffectsEnabled,
+                                    onCheckedChange = {
+                                        wowEffectsEnabled = it
+                                        Toast.makeText(context, if (it) "SRS WOW Activado" else "SRS WOW Desactivado", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = accentColor,
+                                        checkedTrackColor = accentColor.copy(alpha = 0.4f)
+                                    )
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Fundido cruzado (Crossfade)", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${crossfadeSecs.toInt()} s", color = accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = crossfadeSecs,
+                                    onValueChange = { crossfadeSecs = it },
+                                    valueRange = 0.0f..10.0f,
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = accentColor,
+                                        activeTrackColor = accentColor
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsDialog(
+    viewModel: AeroViewModel,
+    onDismiss: () -> Unit
+) {
+    val currentTheme by viewModel.currentTheme.collectAsStateWithLifecycle()
+    Dialog(onDismissRequest = onDismiss) {
+        AeroClassyDialogLayout(title = "Opciones de AeroPlayer", themeId = currentTheme) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                SettingsContent(
+                    viewModel = viewModel,
+                    isEmbeddedInDialog = true,
+                    onDismiss = onDismiss
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    val accentColor = when (currentTheme) {
+                        "claro" -> Color(0xFF005DA3)
+                        "verde" -> Color(0xFF05B26F)
+                        "gris_oscuro" -> Color(0xFF4B5162)
+                        else -> Color(0xFF0088DD)
+                    }
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD))
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.height(38.dp)
                     ) {
-                        Text("Aceptar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Aceptar",
+                            color = if (currentTheme == "claro") Color.Black else Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -3747,17 +4289,18 @@ fun FavoritesPaneView(
 fun SettingsPaneView(
     viewModel: AeroViewModel
 ) {
-    val scannedFolders by viewModel.scannedFolders.collectAsStateWithLifecycle()
-    val ignoredFolders by viewModel.ignoredFolders.collectAsStateWithLifecycle()
-
-    var newScanPath by remember { mutableStateOf("") }
-    var newIgnorePath by remember { mutableStateOf("") }
-
-    var activeSubTab by remember { mutableStateOf(0) } // 0 = Escanear, 1 = Ignorar
+    val currentTheme by viewModel.currentTheme.collectAsStateWithLifecycle()
+    val cardGlowColor = when (currentTheme) {
+        "claro" -> Color(0x1A1A73E8)
+        "verde" -> Color(0x2B10C050)
+        "gris_oscuro" -> Color(0x158CC6FF)
+        else -> Color(0x2B3AD1FF)
+    }
 
     AeroGlassCard(
         modifier = Modifier.fillMaxSize(),
-        cornerRadius = 4.dp
+        cornerRadius = 4.dp,
+        glowColor = cardGlowColor
     ) {
         Column(
             modifier = Modifier
@@ -3765,236 +4308,10 @@ fun SettingsPaneView(
                 .padding(14.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                text = "Configuración de Biblioteca",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp)
+            SettingsContent(
+                viewModel = viewModel,
+                isEmbeddedInDialog = false
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 14.dp)
-                    .background(Color(0x1F000000), RoundedCornerShape(4.dp))
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                val configTabs = listOf("Carpetas a Escanear", "Filtros de Ignorado")
-                configTabs.forEachIndexed { idx, title ->
-                    val isSel = (activeSubTab == idx)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(if (isSel) Color(0x3B0088DD) else Color.Transparent)
-                            .border(1.dp, if (isSel) Color(0x805ED8FF) else Color.Transparent, RoundedCornerShape(3.dp))
-                            .clickable { activeSubTab = idx }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = title,
-                            color = if (isSel) Color.White else Color(0xBACADFEE),
-                            fontSize = 11.sp,
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-
-            if (activeSubTab == 0) {
-                Text(
-                    text = "Carpetas a escanear",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Por defecto busca en todo el almacenamiento. Si agregas carpetas, solo escaneará el subdirectorio indicado de forma optimizada.",
-                    color = Color(0xFFA1CADF),
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newScanPath,
-                        onValueChange = { newScanPath = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp),
-                        placeholder = { Text("Ej: Music/AeroPlayer", color = Color.Gray, fontSize = 11.sp) },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color(0x301A2B3C),
-                            unfocusedContainerColor = Color(0x10000000),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedIndicatorColor = Color(0xFF33AAFF)
-                        ),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Button(
-                        onClick = {
-                            if (newScanPath.isNotBlank()) {
-                                viewModel.addScannedFolder(newScanPath)
-                                newScanPath = ""
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
-                        modifier = Modifier.height(38.dp),
-                        shape = RoundedCornerShape(2.dp)
-                    ) {
-                        Text("Añadir", fontSize = 11.sp, color = Color.White)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 180.dp)
-                        .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
-                        .background(Color(0x15000000))
-                        .padding(4.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    if (scannedFolders.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Escanear todo el dispositivo (por defecto)", color = Color.LightGray, fontSize = 11.sp)
-                        }
-                    } else {
-                        scannedFolders.forEach { path ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                                IconButton(
-                                    onClick = { viewModel.removeScannedFolder(path) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = "Carpetas excluidas (Ignorar)",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Introduce nombres de carpeta para omitir durante el escaneo automático de archivos multimedia (ej: WhatsApp/Media, cancioneros).",
-                    color = Color(0xFFA1CADF),
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newIgnorePath,
-                        onValueChange = { newIgnorePath = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp),
-                        placeholder = { Text("Ej: WhatsApp/Media", color = Color.Gray, fontSize = 11.sp) },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color(0x301A2B3C),
-                            unfocusedContainerColor = Color(0x10000000),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedIndicatorColor = Color(0xFF33AAFF)
-                        ),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Button(
-                        onClick = {
-                            if (newIgnorePath.isNotBlank()) {
-                                viewModel.addIgnoredFolder(newIgnorePath)
-                                newIgnorePath = ""
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088DD)),
-                        modifier = Modifier.height(38.dp),
-                        shape = RoundedCornerShape(2.dp)
-                    ) {
-                        Text("Excluir", fontSize = 11.sp, color = Color.White)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 180.dp)
-                        .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(2.dp))
-                        .background(Color(0x15000000))
-                        .padding(4.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    if (ignoredFolders.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No hay filtros activos (escanea todo libremente)", color = Color.LightGray, fontSize = 11.sp)
-                        }
-                    } else {
-                        ignoredFolders.forEach { path ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0x0EFFFFFF), RoundedCornerShape(2.dp))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = path, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                                IconButton(
-                                    onClick = { viewModel.removeIgnoredFolder(path) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF5252), modifier = Modifier.size(14.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }

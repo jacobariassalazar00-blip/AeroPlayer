@@ -55,6 +55,26 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("selected_theme", themeId).apply()
     }
 
+    private val _eqPreset = MutableStateFlow<String>(
+        prefs.getString("eq_preset", "Normal") ?: "Normal"
+    )
+    val eqPreset = _eqPreset.asStateFlow()
+
+    fun setEqPreset(preset: String) {
+        _eqPreset.value = preset
+        prefs.edit().putString("eq_preset", preset).apply()
+    }
+
+    private val _sleepTimer = MutableStateFlow<String>(
+        prefs.getString("sleep_timer", "Desactivado") ?: "Desactivado"
+    )
+    val sleepTimer = _sleepTimer.asStateFlow()
+
+    fun setSleepTimer(timer: String) {
+        _sleepTimer.value = timer
+        prefs.edit().putString("sleep_timer", timer).apply()
+    }
+
     fun clearDatabaseCache() {
         viewModelScope.launch(Dispatchers.IO) {
             _scannedFolders.value = emptyList()
