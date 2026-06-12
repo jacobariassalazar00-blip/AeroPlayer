@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_aero_widget_azul"
+    android:padding="12dp">
+
+    <!-- Main Row Container representing the widget grid -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:baselineAligned="false">
+
+        <!-- Album Cover Frame with glassy reflections -->
+        <FrameLayout
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="10dp"
+            android:background="#20FFFFFF">
+
+            <ImageView
+                android:id="@+id/widget_cover"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_aero_logo"
+                android:contentDescription="Portada" />
+        </FrameLayout>
+
+        <!-- Song Metadata and Progress Details -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginEnd="6dp">
+
+            <TextView
+                android:id="@+id/widget_track_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Ninguna canción"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_track_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Presione Reproducir"
+                android:textColor="#8AD4FF"
+                android:textSize="11sp"
+                android:layout_marginTop="2dp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Frutiger Aero Glossy Button Tray -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <!-- Previous Key -->
+            <ImageButton
+                android:id="@+id/widget_btn_prev"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_aero_btn_glass"
+                android:src="@drawable/ic_aero_prev"
+                android:scaleType="center"
+                android:layout_marginEnd="5dp"
+                android:contentDescription="Anterior" />
+
+            <!-- Highlighted Play/Pause Key (Classic larger Vista button) -->
+            <ImageButton
+                android:id="@+id/widget_btn_play_pause"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_aero_btn_glass"
+                android:src="@drawable/ic_aero_play"
+                android:scaleType="center"
+                android:layout_marginEnd="5dp"
+                android:contentDescription="Reproducir" />
+
+            <!-- Next Key -->
+            <ImageButton
+                android:id="@+id/widget_btn_next"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_aero_btn_glass"
+                android:src="@drawable/ic_aero_next"
+                android:scaleType="center"
+                android:contentDescription="Siguiente" />
+        </LinearLayout>
+    </LinearLayout>
+</RelativeLayout>

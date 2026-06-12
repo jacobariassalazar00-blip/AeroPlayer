@@ -227,12 +227,14 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
             } else {
                 updatePlaybackState()
                 updateNotification()
+                updateWidgetState()
             }
         } catch (e: IOException) {
             Log.e(TAG, "Failed to load audio source: ${track.path}", e)
             mediaPlayer?.reset()
             _isPlaying.value = false
             updatePlaybackState()
+            updateWidgetState()
         }
     }
 
@@ -249,6 +251,7 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
             startPositionUpdater()
             updatePlaybackState()
             startForegroundServiceNotification()
+            updateWidgetState()
         }
     }
 
@@ -258,6 +261,7 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
         stopPositionUpdater()
         updatePlaybackState()
         updateNotification()
+        updateWidgetState()
         // Allow removing notification from foreground when paused, but keep it in the background
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_DETACH)
@@ -319,6 +323,7 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
         _isPlaying.value = false
         stopPositionUpdater()
         updatePlaybackState()
+        updateWidgetState()
         stopSelf()
     }
 
@@ -515,6 +520,22 @@ class AudioService : Service(), AudioManager.OnAudioFocusChangeListener {
         }
 
         return builder.build()
+    }
+
+    private fun updateWidgetState() {
+        try {
+            val prefs = getSharedPreferences("aero_player_prefs", Context.MODE_PRIVATE)
+            val track = _currentTrack.value
+            prefs.edit().apply {
+                putString("widget_title", track?.title ?: "Ninguna canción")
+                putString("widget_artist", track?.artist ?: "Presione Reproducir")
+                putString("widget_cover_path", track?.coverPath)
+                putBoolean("widget_is_playing", _isPlaying.value)
+            }.apply()
+            com.example.widget.AeroWidgetProvider.updateAllWidgets(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating widget state in service", e)
+        }
     }
 
     override fun onDestroy() {

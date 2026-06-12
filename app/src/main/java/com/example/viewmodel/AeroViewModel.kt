@@ -53,6 +53,11 @@ class AeroViewModel(application: Application) : AndroidViewModel(application) {
     fun setTheme(themeId: String) {
         _currentTheme.value = themeId
         prefs.edit().putString("selected_theme", themeId).apply()
+        try {
+            com.example.widget.AeroWidgetProvider.updateAllWidgets(getApplication())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update widgets on theme change", e)
+        }
     }
 
     private val _eqPreset = MutableStateFlow<String>(

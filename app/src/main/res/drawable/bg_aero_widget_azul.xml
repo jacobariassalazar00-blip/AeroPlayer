@@ -1,0 +1,30 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Back Glow plate with Royal/Cyber Midnight Blue Gradient -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:startColor="#E6020E1D"
+                android:endColor="#E6051B33" />
+            <corners android:radius="16dp" />
+            <stroke
+                android:width="1.5dp"
+                android:color="#4D5ED8FF" />
+        </shape>
+    </item>
+
+    <!-- Translucent Vista/Aurora cyan bubble top highlight (gloss surface overlay) -->
+    <item android:bottom="45dp">
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#2AFFFFFF"
+                android:endColor="#00FFFFFF" />
+            <corners
+                android:topLeftRadius="16dp"
+                android:topRightRadius="16dp"
+                android:bottomLeftRadius="0dp"
+                android:bottomRightRadius="0dp" />
+        </shape>
+    </item>
+</layer-list>
